@@ -1,6 +1,5 @@
 node_modules
 .env
 db/database.sqlite
-discloud
 discloud.config
 test.js
