@@ -16,7 +16,7 @@ const {
     lucroHandler,
     csvHandler } = require("./handler");
 
-const {getTokenTransactions} = require("./util/contrato");
+const {getTokenTransactions, decodeTransactionInput} = require("./util/contrato");
 const {formatarData} =require("./util/util");
 
 // Inicializar DB
@@ -64,11 +64,11 @@ bot.action("configAPIKey", (ctx) => ctx.scene.enter("config-apikey"));
 
 // Cache simples por usuário para evitar notificações duplicadas
 let notificados = new Set();
-const inicioMonitoramento = Math.floor(Date.now() / 1000); // timestamp em segundos
+// const inicioMonitoramento = Math.floor(Date.now() / 1000); // timestamp em segundos
 
 //debug
-// const HORAS_ATRAS = 6; // escolha quantas horas
-// let inicioMonitoramento = Math.floor(Date.now() / 1000) - (HORAS_ATRAS * 60 * 60);
+const HORAS_ATRAS = 6; // escolha quantas horas
+let inicioMonitoramento = Math.floor(Date.now() / 1000) - (HORAS_ATRAS * 60 * 60);
 
 
 async function monitorarOpenPositions() {
@@ -97,9 +97,15 @@ async function monitorarOpenPositions() {
 
                 for (const tx of novas) {
                     const perdaIcone = tx.amount.startsWith("-") ? "🔻 " : "";
+                    const decode = await decodeTransactionInput(tx.transactionHash);
+                    const conta = decode?.args?.accountId?.[0] || 'unknown';
+
                     let mensagem = `🚨 *Nova openPosition detectada!*\n`;
+                    mensagem += `🆔 Conta: ${conta}\n`;
                     mensagem += `🔗 [Ver Transação](https://polygonscan.com/tx/${tx.transactionHash})\n\n`;
+                    
                     mensagem += `💰 Quantia: ${perdaIcone}${tx.amount}\n`;
+                    mensagem += `⛽ Gas: ${tx.gasValor}\n`;
                     mensagem += `📅 Data: ${formatarData(tx.timestamp)}\n`;
 
                     await bot.telegram.sendMessage(user.telegram_id, mensagem, {

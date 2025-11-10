@@ -1,6 +1,7 @@
 require("dotenv").config();
 const axios = require('axios');
 const ethers = require('ethers');
+const provider_decode = new ethers.JsonRpcProvider(process.env.RPC_GLOBAL);
 
 async function getTokenTransactions(walletAddress, tokenContractAddress, apiKey) {
     if (!apiKey) {
@@ -74,6 +75,11 @@ async function getTokenTransactions(walletAddress, tokenContractAddress, apiKey)
             const index = tx.transactionIndex;
             const methodId = tx.methodId;
 
+            const gasUsed = BigInt(tx.gasUsed);
+            const gasPrice = BigInt(tx.gasPrice);
+            const totalWei = gasUsed * gasPrice;
+            const gasValor = Number(ethers.formatEther(totalWei)).toFixed(5);
+
             return {
                 transactionHash: tx.hash,
                 method,
@@ -82,7 +88,8 @@ async function getTokenTransactions(walletAddress, tokenContractAddress, apiKey)
                 functionName,
                 timestamp: parseInt(tx.timeStamp),
                 index,
-                methodId
+                methodId,
+                gasValor
             };
         }));
 
@@ -98,6 +105,76 @@ async function getTokenTransactions(walletAddress, tokenContractAddress, apiKey)
 }
 
 
+const ABI_DECODE_TX = [
+  "function LiquidityAdd(string[] accountId,address strategyToken,address coin,uint256 amount)",
+  "function LiquidityAdd(string accountId,address strategyToken,address coin,uint256 amount)", // fallback possível
+  "function LiquidityRemove(string[] accountId,address strategyToken,address coin,uint256 amount)",
+  "function LiquidityRemove(string accountId,address strategyToken,address coin,uint256 amount)", // fallback
+  "function openPosition(address contractAddress,string accountId,address strategyToken,address user,int256 amount,(address,address)[] pairs,uint256 leverage,address referrer)",
+  "function openPosition(address, string, address, address, int256, (address,address)[], uint256, address, string)"
+];
+
+
+// Função que busca e decodifica input data
+async function decodeTransactionInput(txHash, provider1) {
+    console.log("⚙️ Executando decodeTransactionInput");
+
+    try {
+        const tx = await provider_decode.getTransaction(txHash);
+
+        if (!tx) throw new Error(`Transação ${txHash} não encontrada`);
+
+        const iface = new ethers.Interface(ABI_DECODE_TX);
+        const decoded = iface.parseTransaction({ data: tx.data, value: tx.value });
+        if (!decoded) throw new Error("Método não encontrado na ABI");
+
+        if (decoded.name === "LiquidityAdd" || decoded.name === "LiquidityRemove") {
+            const rawAccount = decoded.args[0];
+            const accountIdArray = Array.isArray(rawAccount) ? rawAccount : [rawAccount];
+
+            return {
+                functionName: decoded.name,
+                args: {
+                    accountId: accountIdArray,
+                    strategyToken: decoded.args[1],
+                    coin: decoded.args[2],
+                    amount: decoded.args[3]?.toString?.() || null,
+                },
+            };
+        }
+
+        if (decoded.name === "openPosition") {
+            const rawAccount = decoded.args[1];
+            const accountIdArray = Array.isArray(rawAccount) ? rawAccount : [rawAccount];
+
+            return {
+                functionName: decoded.name,
+                args: {
+                    contractAddress: decoded.args[0],
+                    accountId: accountIdArray,
+                    strategyToken: decoded.args[2],
+                    user: decoded.args[3],
+                    amount: decoded.args[4]?.toString?.() || null,
+                    pairs: decoded.args[5],
+                    leverage: decoded.args[6]?.toString?.() || null,
+                    referrer: decoded.args[7],
+                },
+            };
+        }
+
+        return {
+            functionName: decoded.name,
+            args: decoded.args,
+        };
+    } catch (error) {
+        const methodId = ""; //(tx?.data || "").slice(0, 10);
+        console.warn(`Erro ao decodificar input: ${txHash} ${error.message} (${methodId} )`);
+        return { functionName: "unknown", args: {}, methodId };
+    }
+}
+
+
 module.exports = {
     getTokenTransactions,
+    decodeTransactionInput
 };
