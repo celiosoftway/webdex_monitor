@@ -1,13 +1,18 @@
 require("dotenv").config();
 const { Telegraf, Scenes, session, Markup } = require("telegraf");
+
+// Banco de dados
 const sequelize = require("./db/database");
 const User = require("./models/User");
+const AccountAlias = require("./models/AccountAlias"); 
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
+// scenes
 const carteiraScene = require("./scenes/configCarteiraScene");
 const rpcScene = require("./scenes/configRpcScene");
 const apiKeyScene = require("./scenes/configApiKeyScene");
+const configContasScene = require("./scenes/configContasScene");
 
 const {
     startHandler,
@@ -28,7 +33,8 @@ const {formatarData} =require("./util/util");
 const stage = new Scenes.Stage([
     carteiraScene,
     rpcScene,
-    apiKeyScene
+    apiKeyScene,
+    configContasScene
 ]);
 
 bot.use(session());
@@ -37,10 +43,12 @@ bot.use(stage.middleware());
 // exibe o atalho dos comandos no Telegran
 bot.telegram.setMyCommands([
     { command: 'start', description: 'inicia o teclado' },
+    { command: 'config_contas', description: 'Configura contas' },
 ]);
 
 // Comandos, será chamado a função do handler
 bot.command("start", startHandler);
+bot.command("config_contas", (ctx) => ctx.scene.enter("config-contas")); 
 
 // hears executa quando digitado o texto monitorado, neste caso o texto vem do keyboard
 bot.hears("🧠 Ajuda", ajudaHandler);
@@ -100,8 +108,18 @@ async function monitorarOpenPositions() {
                     const decode = await decodeTransactionInput(tx.transactionHash);
                     const conta = decode?.args?.accountId?.[0] || 'unknown';
 
+                    let contaDisplay = conta;
+                    if (conta !== 'unknown') {
+                        const alias = await AccountAlias.findOne({
+                            where: { telegram_id: user.telegram_id, account_id: conta }
+                        });
+                        if (alias) {
+                            contaDisplay = alias.friendly_name;
+                        }
+                    }
+
                     let mensagem = `🚨 *Nova openPosition detectada!*\n`;
-                    mensagem += `🆔 Conta: ${conta}\n`;
+                    mensagem += `🆔 Conta: ${contaDisplay}\n`;
                     mensagem += `🔗 [Ver Transação](https://polygonscan.com/tx/${tx.transactionHash})\n\n`;
                     
                     mensagem += `💰 Quantia: ${perdaIcone}${tx.amount}\n`;
