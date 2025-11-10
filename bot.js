@@ -21,7 +21,7 @@ const {formatarData} =require("./util/util");
 
 // Inicializar DB
 (async () => {
-    await sequelize.sync();
+    await sequelize.sync({ alter: true });
 })();
 
 // Configurar Stage com Scenes
@@ -97,8 +97,8 @@ async function monitorarOpenPositions() {
 
                 for (const tx of novas) {
                     const perdaIcone = tx.amount.startsWith("-") ? "🔻 " : "";
-                    let mensagem = `🚨 *Nova openPosition detectada!*`;
-                    mensagem += `🔗 [Ver Transação](https://polygonscan.com/tx/${tx.transactionHash})\n`;
+                    let mensagem = `🚨 *Nova openPosition detectada!*\n`;
+                    mensagem += `🔗 [Ver Transação](https://polygonscan.com/tx/${tx.transactionHash})\n\n`;
                     mensagem += `💰 Quantia: ${perdaIcone}${tx.amount}\n`;
                     mensagem += `📅 Data: ${formatarData(tx.timestamp)}\n`;
 
