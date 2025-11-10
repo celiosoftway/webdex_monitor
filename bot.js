@@ -64,11 +64,11 @@ bot.action("configAPIKey", (ctx) => ctx.scene.enter("config-apikey"));
 
 // Cache simples por usuário para evitar notificações duplicadas
 let notificados = new Set();
-// const inicioMonitoramento = Math.floor(Date.now() / 1000); // timestamp em segundos
+const inicioMonitoramento = Math.floor(Date.now() / 1000); // timestamp em segundos
 
 //debug
-const HORAS_ATRAS = 6; // escolha quantas horas
-let inicioMonitoramento = Math.floor(Date.now() / 1000) - (HORAS_ATRAS * 60 * 60);
+// const HORAS_ATRAS = 6; // escolha quantas horas
+// let inicioMonitoramento = Math.floor(Date.now() / 1000) - (HORAS_ATRAS * 60 * 60);
 
 
 async function monitorarOpenPositions() {
