@@ -1,7 +1,8 @@
 require("dotenv").config();
 const { Markup } = require("telegraf");
 const User = require("./models/User");
-const { getHistoricoDados, getResumoPeriodo, historico } = require("./util/lucro")
+const { getHistoricoDados, getResumoPeriodo, historico } = require("./util/lucro");
+const { getCMCPrice } = require('./util/util');
 
 // teclado do bot
 const keyboard = Markup.keyboard([
@@ -127,35 +128,49 @@ async function lucroHandler(ctx) {
 
     try {
 
+        const polUsdPrice = await getCMCPrice("POL", "USD");
+        console.log(polUsdPrice)
+
         const { resultado: dados, lucro24h } = await getHistoricoDados(carteira, apikey, colateral);
         const resumo0d = getResumoPeriodo(dados, 0);
         const resumo1d = getResumoPeriodo(dados, 1);
         const resumo7d = getResumoPeriodo(dados, 7);
         const resumo30d = getResumoPeriodo(dados, 30);
 
+        const gasUsdresumo0d = resumo0d.gasPeriodo * polUsdPrice;
+        const gasUsdlucro24h = lucro24h.gasTotal * polUsdPrice;
+        const gasUsdresumo1d = resumo1d.gasPeriodo * polUsdPrice;
+        const gasUsdresumo7d = resumo7d.gasPeriodo * polUsdPrice;
+        const gasUsdresumo30d = resumo30d.gasPeriodo * polUsdPrice;
+
         let mensagem = ``;
         mensagem += `📅 *Resultado hoje*\n`;
         mensagem += `🧾 ${resumo0d.totalOperacoes} operações\n`;
+        mensagem += `⛽ ${resumo0d.gasPeriodo.toFixed(3)} POL (${gasUsdresumo0d.toFixed(3)} USD)\n`;
         mensagem += `📊 Add: +${resumo0d.totalLucroBruto.toFixed(6)} / Remove: ${resumo0d.totalPerdaBruta.toFixed(6)}\n`;
         mensagem += `💸 Lucro: ${resumo0d.lucroDia.toFixed(6)} - (${resumo0d.percentual.toFixed(2)}%)\n\n`;
 
         mensagem += `📅 *Ultimas 24 horas*\n`;
-        mensagem += `🧾 ${lucro24h.totalOperacoes} operações\n`;
+        mensagem += `🧾 ${lucro24h.totalOperacoes} operações\n`;  
+        mensagem += `⛽ ${lucro24h.gasTotal.toFixed(3)} POL (${gasUsdlucro24h.toFixed(3)} USD)\n`;
         mensagem += `📊 Add: +${lucro24h.totalLucroBruto.toFixed(6)} / Remove: ${lucro24h.totalPerdaBruta.toFixed(6)}\n`;
         mensagem += `💸 Lucro: ${lucro24h.valor.toFixed(6)} - (${lucro24h.percentual.toFixed(2)}%)\n\n`;
 
         mensagem += `📅 *Ultimo dia*\n`;
         mensagem += `🧾 ${resumo1d.totalOperacoes} operações\n`;
+        mensagem += `⛽ ${resumo1d.gasPeriodo.toFixed(3)} POL (${gasUsdresumo1d.toFixed(3)} USD)\n`;
         mensagem += `📊 Add: +${resumo1d.totalLucroBruto.toFixed(6)} / Remove: ${resumo1d.totalPerdaBruta.toFixed(6)}\n`;
         mensagem += `💸 Lucro: ${resumo1d.lucroDia.toFixed(6)} - (${resumo1d.percentual.toFixed(2)}%)\n\n`;
 
         mensagem += `📅 *Ultimos 7 dias*\n`;
         mensagem += `🧾 ${resumo7d.totalOperacoes} operações\n`;
+        mensagem += `⛽ ${resumo7d.gasPeriodo.toFixed(3)} POL (${gasUsdresumo7d.toFixed(3)} USD)\n`;
         mensagem += `📊 Add: +${resumo7d.totalLucroBruto.toFixed(6)} / Remove: ${resumo7d.totalPerdaBruta.toFixed(6)}\n`;
         mensagem += `💸 Lucro: ${resumo7d.lucroDia.toFixed(6)} - (${resumo7d.percentual.toFixed(2)}%)\n\n`;
 
         mensagem += `📅 *Ultimo 30 dias*\n`;
         mensagem += `🧾 ${resumo30d.totalOperacoes} operações\n`;
+        mensagem += `⛽ ${resumo30d.gasPeriodo.toFixed(3)} POL (${gasUsdresumo30d.toFixed(3)} USD)\n`;
         mensagem += `📊 Add: +${resumo30d.totalLucroBruto.toFixed(6)} / Remove: ${resumo30d.totalPerdaBruta.toFixed(6)}\n`;
         mensagem += `💸 Lucro: ${resumo30d.lucroDia.toFixed(6)} - (${resumo30d.percentual.toFixed(2)}%)\n\n`;
 

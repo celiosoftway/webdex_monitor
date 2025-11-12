@@ -17,7 +17,7 @@ const {
     csvHandler } = require("./handler");
 
 const {getTokenTransactions, decodeTransactionInput} = require("./util/contrato");
-const {formatarData} =require("./util/util");
+const {formatarData, getCMCPrice} =require("./util/util");
 
 // Inicializar DB
 (async () => {
@@ -95,17 +95,21 @@ async function monitorarOpenPositions() {
                     tx.timestamp >= inicioMonitoramento
                 );
 
+                const polUsdPrice = await getCMCPrice("POL", "USD");
+
                 for (const tx of novas) {
                     const perdaIcone = tx.amount.startsWith("-") ? "🔻 " : "";
                     const decode = await decodeTransactionInput(tx.transactionHash);
                     const conta = decode?.args?.accountId?.[0] || 'unknown';
+
+                    const gasUSD = tx.gasValor * polUsdPrice;
 
                     let mensagem = `🚨 *Nova openPosition detectada!*\n`;
                     mensagem += `🆔 Conta: ${conta}\n`;
                     mensagem += `🔗 [Ver Transação](https://polygonscan.com/tx/${tx.transactionHash})\n\n`;
                     
                     mensagem += `💰 Quantia: ${perdaIcone}${tx.amount}\n`;
-                    mensagem += `⛽ Gas: ${tx.gasValor}\n`;
+                    mensagem += `⛽ Gas: ${tx.gasValor} (${gasUSD.toFixed(3)} USD) \n`;
                     mensagem += `📅 Data: ${formatarData(tx.timestamp)}\n`;
 
                     await bot.telegram.sendMessage(user.telegram_id, mensagem, {

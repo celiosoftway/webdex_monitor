@@ -12,7 +12,7 @@ async function getHistoricoDados(carteira, api, token) {
   const apiKey = api || process.env.POLYGONSCAN_API_KEY;
   const colateral = token || process.env.TOKEN_COLATERAL_ADDRESS;
 
-   const params = new URLSearchParams({
+  const params = new URLSearchParams({
     chainid: '137',
     module: 'account',
     action: 'tokentx',
@@ -25,13 +25,12 @@ async function getHistoricoDados(carteira, api, token) {
   const url = `https://api.etherscan.io/v2/api?${params.toString()}`;
   const response = await fetch(url);
   const data = await response.json();
-
   if (!data.result || !Array.isArray(data.result)) {
     throw new Error("Erro ao obter transações.");
   }
 
-  // --- agrega por DIA, já contando operações e separando ganhos/perdas (OpenPosition)
   const resumoPorDia = {};
+
   for (const tx of data.result) {
     const tipo = identificarTipoOperacaoPorNome(tx.functionName);
     if (tipo === 'Desconhecido') continue;
@@ -40,18 +39,26 @@ async function getHistoricoDados(carteira, api, token) {
     const isSaida = tx.from.toLowerCase() === signerAddress.toLowerCase();
     const valor = parseFloat(ethers.formatUnits(tx.value, 6)) * (isSaida ? -1 : 1);
 
+    // --- cálculo do gas ---
+    const gasUsed = BigInt(tx.gasUsed || 0n);
+    const gasPrice = BigInt(tx.gasPrice || 0n);
+    const totalWei = gasUsed * gasPrice;
+    const gas = parseFloat(ethers.formatEther(totalWei)) || 0;
+
     if (!resumoPorDia[dataChave]) {
       resumoPorDia[dataChave] = {
         LiquidityAdd: 0,
         LiquidityRemove: 0,
         OpenPosition: 0,
-        opCount: 0,          // nº de OpenPosition no dia
-        lucroBruto: 0,       // soma de positivos (OpenPosition)
-        perdaBruta: 0        // soma do módulo dos negativos (OpenPosition)
+        opCount: 0,
+        lucroBruto: 0,
+        perdaBruta: 0,
+        gas: 0
       };
     }
 
     resumoPorDia[dataChave][tipo] += valor;
+    resumoPorDia[dataChave].gas += gas;
 
     if (tipo === 'OpenPosition') {
       resumoPorDia[dataChave].opCount += 1;
@@ -69,32 +76,30 @@ async function getHistoricoDados(carteira, api, token) {
   let capital = 0;
   let capitaldia1 = 0;
   let lucroTotal = 0;
+  let gastotal = 0;
+
   const resultado = [];
 
-  // 🔹 obter o primeiro capital inicial (caso o histórico comece com 0)
   if (datas.length > 0) {
     const primeiraData = datas[0];
     const d0 = resumoPorDia[primeiraData];
-    // se houver adição de liquidez no primeiro dia, usa como capital inicial
-    if (d0.LiquidityAdd > 0) {
-      capitaldia1 = d0.LiquidityAdd;
-    }
+    if (d0.LiquidityAdd > 0) capitaldia1 = d0.LiquidityAdd;
   }
 
   for (const dataKey of datas) {
     const d = resumoPorDia[dataKey];
     const investimento = d.LiquidityAdd + d.LiquidityRemove;
     const lucro = d.OpenPosition;
-
     const capitalInicialDia = capital > 0 ? capital : capitaldia1;
     capital += investimento + lucro;
     lucroTotal += lucro;
+    gastotal += d.gas;
 
     const transacoesDoDia = data.result.filter(tx => {
       return formatarDataSimples(tx.timeStamp) === dataKey;
     });
 
-    const percentualPonderado = calculaPPT(transacoesDoDia, capitalInicialDia,signerAddress);
+    const percentualPonderado = calculaPPT(transacoesDoDia, capitalInicialDia, signerAddress);
 
     resultado.push({
       data: dataKey,
@@ -102,38 +107,49 @@ async function getHistoricoDados(carteira, api, token) {
       capital,
       lucroDia: lucro,
       lucroTotal,
-      percentual: percentualPonderado, // capital !== 0 ? (lucro / capital) * 100 : 0,
-
-      // novos campos POR DIA:
+      percentual: percentualPonderado,
       operacoes: d.opCount,
       lucroBruto: d.lucroBruto,
-      perdaBruta: d.perdaBruta
+      perdaBruta: d.perdaBruta,
+      gasDia: d.gas,        // 👈 adiciona gas diário
+      gasTotal: gastotal    // 👈 adiciona gas acumulado
     });
   }
 
-  // ---- Lucro últimas 24h (depois de preencher resultado)
+  // --- cálculo das últimas 24h ---
+  // ---- Lucro e gas das últimas 24h ----
   const agora = Math.floor(Date.now() / 1000);
   const limite24h = agora - 24 * 60 * 60;
 
-  // Filtra apenas as operações OpenPosition nas últimas 24h
-  const ultimas24hOps = data.result
-    .filter(op => identificarTipoOperacaoPorNome(op.functionName) === "OpenPosition" && op.timeStamp >= limite24h)
-    .map(op => {
-      const valor = parseFloat(ethers.formatUnits(op.value, 6)) *
-        (op.from.toLowerCase() === signerAddress.toLowerCase() ? -1 : 1);
-      return { valor };
-    });
+  const ultimas24hOps = data.result.filter(op => {
+    const tipo = identificarTipoOperacaoPorNome(op.functionName);
+    return tipo === "OpenPosition" && Number(op.timeStamp) >= limite24h;
+  });
 
-  // ---- Estatísticas das 24h
-  const lucro24hValor = ultimas24hOps.reduce((acc, op) => acc + op.valor, 0);
-  const totalOperacoes24h = ultimas24hOps.length;
-  const totalLucroBruto24h = ultimas24hOps.filter(op => op.valor >= 0).reduce((acc, op) => acc + op.valor, 0);
-  const totalPerdaBruta24h = ultimas24hOps.filter(op => op.valor < 0).reduce((acc, op) => acc + Math.abs(op.valor), 0);
+  // 💰 lucro/perda das últimas 24h
+  const ultimas24hValores = ultimas24hOps.map(op => {
+    const valor = parseFloat(ethers.formatUnits(op.value, 6)) *
+      (op.from.toLowerCase() === signerAddress.toLowerCase() ? -1 : 1);
+    return valor;
+  });
 
-  // --- Calcula a porcentagem ---
+  // ⛽ cálculo do gas das últimas 24h
+  const gas24hTotal = ultimas24hOps.reduce((acc, op) => {
+    const gasUsed = BigInt(op.gasUsed || 0n);
+    const gasPrice = BigInt(op.gasPrice || 0n);
+    const totalWei = gasUsed * gasPrice;
+    const gasEther = parseFloat(ethers.formatEther(totalWei)) || 0;
+    return acc + gasEther;
+  }, 0);
+
+  // 📈 estatísticas de lucro
+  const lucro24hValor = ultimas24hValores.reduce((acc, v) => acc + v, 0);
+  const totalOperacoes24h = ultimas24hValores.length;
+  const totalLucroBruto24h = ultimas24hValores.filter(v => v >= 0).reduce((acc, v) => acc + v, 0);
+  const totalPerdaBruta24h = ultimas24hValores.filter(v => v < 0).reduce((acc, v) => acc + Math.abs(v), 0);
+
+  // 🔹 ROI das últimas 24h
   let capitalAntes24h = 0;
-
-  // pega o último capital antes do início das últimas 24h
   for (let i = resultado.length - 1; i >= 0; i--) {
     const dataItem = new Date(resultado[i].data.split('/').reverse().join('-'));
     if (dataItem.getTime() / 1000 < limite24h) {
@@ -141,27 +157,24 @@ async function getHistoricoDados(carteira, api, token) {
       break;
     }
   }
-
-  // caso não tenha nenhum registro anterior, usa capital acumulado até agora
   if (capitalAntes24h === 0 && resultado.length > 0) {
     capitalAntes24h = resultado[resultado.length - 1].capital;
   }
-
   const lucro24hPercent = capitalAntes24h > 0 ? (lucro24hValor / capitalAntes24h) * 100 : 0;
 
-  // objeto final das últimas 24h
+  // 🧾 objeto final das últimas 24h
   const lucro24h = {
     valor: lucro24hValor,
     percentual: lucro24hPercent,
     totalOperacoes: totalOperacoes24h,
     totalLucroBruto: totalLucroBruto24h,
-    totalPerdaBruta: totalPerdaBruta24h
+    totalPerdaBruta: totalPerdaBruta24h,
+    gasTotal: gas24hTotal   // 👈 novo campo: total de gas nas últimas 24h
   };
 
-
-  // Agora só retornamos 'resultado' (com métricas por dia) e 'lucro24h'
   return { resultado, lucro24h };
 }
+
 
 function getResumoPeriodo(dados, dias = 7, incluirHoje = false) {
   const ordenarPorData = (a, b) => {
@@ -238,6 +251,9 @@ function getResumoPeriodo(dados, dias = 7, incluirHoje = false) {
   const capitalInicial = primeiroDia.capital;
   const capitalFinal = ultimoDia.capital;
 
+  const gasPeriodo = filtrados.reduce((acc, x) => acc + (x.gasDia || 0), 0);
+
+
   return {
     periodo:
       dias === 0
@@ -254,7 +270,8 @@ function getResumoPeriodo(dados, dias = 7, incluirHoje = false) {
     percentual,
     totalOperacoes,
     totalLucroBruto,
-    totalPerdaBruta
+    totalPerdaBruta,
+    gasPeriodo
   };
 }
 
@@ -334,7 +351,7 @@ function calculaPPT(transacoesDia = [], capitalInicialDia = 0, carteira) {
   return percentual;
 }
 
-async function historico(carteira,api, token) {
+async function historico(carteira, api, token) {
   try {
     const signerAddress = carteira;
     const apiKey = api;
@@ -410,7 +427,7 @@ async function historico(carteira,api, token) {
         return formatarDataSimples(tx.timeStamp) === dataKey;
       });
 
-      const percentual = calculaPPT(transacoesDoDia, capitalInicialDia,signerAddress);
+      const percentual = calculaPPT(transacoesDoDia, capitalInicialDia, signerAddress);
       //const percentual = capital !== 0 ? (lucro / capital) * 100 : 0;
 
       csv.push(`${dataKey};${investimento.toFixed(2).replace('.', ',')};${capital.toFixed(2).replace('.', ',')};${lucro.toFixed(2).replace('.', ',')};${lucroTotal.toFixed(2).replace('.', ',')};${percentual.toFixed(2).replace('.', ',')}%`);
@@ -424,6 +441,7 @@ async function historico(carteira,api, token) {
     console.error("Erro ao exibir histórico:", err);
   }
 }
+
 
 module.exports = {
   getResumoPeriodo,
