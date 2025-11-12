@@ -19,7 +19,8 @@ const AccountAlias = sequelize.define('AccountAlias', {
   indexes: [
     {
       unique: true,
-      fields: ['telegram_id', 'account_id']
+      fields: ['telegram_id', 'account_id'],
+      name: 'conta_alias'
     }
   ]
 });

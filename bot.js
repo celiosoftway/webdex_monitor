@@ -4,7 +4,7 @@ const { Telegraf, Scenes, session, Markup } = require("telegraf");
 // Banco de dados
 const sequelize = require("./db/database");
 const User = require("./models/User");
-const AccountAlias = require("./models/AccountAlias"); 
+const AccountAlias = require("./models/AccountAlias");
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
@@ -21,12 +21,12 @@ const {
     lucroHandler,
     csvHandler } = require("./handler");
 
-const {getTokenTransactions, decodeTransactionInput} = require("./util/contrato");
-const {formatarData, getCMCPrice} =require("./util/util");
+const { getTokenTransactions, decodeTransactionInput } = require("./util/contrato");
+const { formatarData, getCMCPrice } = require("./util/util");
 
 // Inicializar DB
 (async () => {
-    await sequelize.sync({ alter: true });
+    await sequelize.sync();
 })();
 
 // Configurar Stage com Scenes
@@ -48,7 +48,7 @@ bot.telegram.setMyCommands([
 
 // Comandos, será chamado a função do handler
 bot.command("start", startHandler);
-bot.command("config_contas", (ctx) => ctx.scene.enter("config-contas")); 
+bot.command("config_contas", (ctx) => ctx.scene.enter("config-contas"));
 
 // hears executa quando digitado o texto monitorado, neste caso o texto vem do keyboard
 bot.hears("🧠 Ajuda", ajudaHandler);
@@ -111,7 +111,7 @@ async function monitorarOpenPositions() {
                     const conta = decode?.args?.accountId?.[0] || 'unknown';
 
                     const gasUSD = tx.gasValor * polUsdPrice;
-                    
+
                     let contaDisplay = conta;
                     if (conta !== 'unknown') {
                         const alias = await AccountAlias.findOne({
@@ -125,7 +125,7 @@ async function monitorarOpenPositions() {
                     let mensagem = `🚨 *Nova openPosition detectada!*\n`;
                     mensagem += `🆔 Conta: ${contaDisplay}\n`;
                     mensagem += `🔗 [Ver Transação](https://polygonscan.com/tx/${tx.transactionHash})\n\n`;
-                    
+
                     mensagem += `💰 Quantia: ${perdaIcone}${tx.amount}\n`;
                     mensagem += `⛽ Gas: ${tx.gasValor} (${gasUSD.toFixed(3)} USD) \n`;
                     mensagem += `📅 Data: ${formatarData(tx.timestamp)}\n`;
