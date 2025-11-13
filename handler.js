@@ -106,30 +106,33 @@ async function ajudaHandler(ctx) {
     );
 }
 
+// cálculo do lucro líquido e percentual ajustado
+function getLucroLiquido(resumo, gasUsd) {
+    const lucroBrutoUsd = resumo.lucroDia || resumo.valor || 0; // lucro em token colateral
+    const lucroLiquidoUsd = lucroBrutoUsd - gasUsd; 
+    const percentualLiquido = ((lucroLiquidoUsd / Math.abs(lucroBrutoUsd)) * resumo.percentual) || 0;
+    return { lucroLiquidoUsd, percentualLiquido };
+}
+
 async function lucroHandler(ctx) {
     const telegram_id = ctx.from.id.toString();
     const user = await User.findOne({ where: { telegram_id } });
 
-    if (!user || !user.wallet) {
+    if (!user || !user.wallet)
         return ctx.reply("❌ Você precisa configurar sua carteira usando /config");
-    }
 
-    if (!user.rpc_url) {
+    if (!user.rpc_url)
         return ctx.reply("❌ Você precisa configurar o RPC usando /config");
-    }
 
-    if (!user.polygonscan_api_key) {
+    if (!user.polygonscan_api_key)
         return ctx.reply("❌ Você precisa configurar sua chave PolygonScan API usando /config");
-    }
 
     const carteira = user.wallet;
     const apikey = user.polygonscan_api_key;
     const colateral = process.env.TOKEN_COLATERAL_ADDRESS;
 
     try {
-
         const polUsdPrice = await getCMCPrice("POL", "USD");
-        console.log(polUsdPrice)
 
         const { resultado: dados, lucro24h } = await getHistoricoDados(carteira, apikey, colateral);
         const resumo0d = getResumoPeriodo(dados, 0);
@@ -143,37 +146,48 @@ async function lucroHandler(ctx) {
         const gasUsdresumo7d = resumo7d.gasPeriodo * polUsdPrice;
         const gasUsdresumo30d = resumo30d.gasPeriodo * polUsdPrice;
 
+        // adiciona cálculo de lucro líquido
+        const l0 = getLucroLiquido(resumo0d, gasUsdresumo0d);
+        const l24 = getLucroLiquido(lucro24h, gasUsdlucro24h);
+        const l1 = getLucroLiquido(resumo1d, gasUsdresumo1d);
+        const l7 = getLucroLiquido(resumo7d, gasUsdresumo7d);
+        const l30 = getLucroLiquido(resumo30d, gasUsdresumo30d);
+
         let mensagem = ``;
         mensagem += `📅 *Resultado hoje*\n`;
         mensagem += `🧾 ${resumo0d.totalOperacoes} operações\n`;
         mensagem += `⛽ ${resumo0d.gasPeriodo.toFixed(3)} POL (${gasUsdresumo0d.toFixed(3)} USD)\n`;
-        mensagem += `📊 Add: +${resumo0d.totalLucroBruto.toFixed(6)} / Remove: ${resumo0d.totalPerdaBruta.toFixed(6)}\n`;
-        mensagem += `💸 Lucro: ${resumo0d.lucroDia.toFixed(6)} - (${resumo0d.percentual.toFixed(2)}%)\n\n`;
+        mensagem += `📊 OP: ${resumo0d.totalLucroBruto.toFixed(3)} | -${resumo0d.totalPerdaBruta.toFixed(3)}\n`;
+        mensagem += `💸 Lucro: ${resumo0d.lucroDia.toFixed(3)} (${resumo0d.percentual.toFixed(2)}%)\n`;
+        mensagem += `💰 Lucro - gas: ${l0.lucroLiquidoUsd.toFixed(3)} (${l0.percentualLiquido.toFixed(2)}%)\n\n`;
 
-        mensagem += `📅 *Ultimas 24 horas*\n`;
-        mensagem += `🧾 ${lucro24h.totalOperacoes} operações\n`;  
+        mensagem += `📅 *Últimas 24 horas*\n`;
+        mensagem += `🧾 ${lucro24h.totalOperacoes} operações\n`;
         mensagem += `⛽ ${lucro24h.gasTotal.toFixed(3)} POL (${gasUsdlucro24h.toFixed(3)} USD)\n`;
-        mensagem += `📊 Add: +${lucro24h.totalLucroBruto.toFixed(6)} / Remove: ${lucro24h.totalPerdaBruta.toFixed(6)}\n`;
-        mensagem += `💸 Lucro: ${lucro24h.valor.toFixed(6)} - (${lucro24h.percentual.toFixed(2)}%)\n\n`;
+        mensagem += `📊 OP: ${lucro24h.totalLucroBruto.toFixed(3)} | -${lucro24h.totalPerdaBruta.toFixed(3)}\n`;
+        mensagem += `💸 Lucro: ${lucro24h.valor.toFixed(3)} (${lucro24h.percentual.toFixed(2)}%)\n`;
+        mensagem += `💰 Lucro - gas: ${l24.lucroLiquidoUsd.toFixed(3)} (${l24.percentualLiquido.toFixed(2)}%)\n\n`;
 
-        mensagem += `📅 *Ultimo dia*\n`;
+        mensagem += `📅 *Último dia*\n`;
         mensagem += `🧾 ${resumo1d.totalOperacoes} operações\n`;
         mensagem += `⛽ ${resumo1d.gasPeriodo.toFixed(3)} POL (${gasUsdresumo1d.toFixed(3)} USD)\n`;
-        mensagem += `📊 Add: +${resumo1d.totalLucroBruto.toFixed(6)} / Remove: ${resumo1d.totalPerdaBruta.toFixed(6)}\n`;
-        mensagem += `💸 Lucro: ${resumo1d.lucroDia.toFixed(6)} - (${resumo1d.percentual.toFixed(2)}%)\n\n`;
+        mensagem += `📊 OP: ${resumo1d.totalLucroBruto.toFixed(3)} | -${resumo1d.totalPerdaBruta.toFixed(3)}\n`;
+        mensagem += `💸 Lucro: ${resumo1d.lucroDia.toFixed(3)} (${resumo1d.percentual.toFixed(2)}%)\n`;
+        mensagem += `💰 Lucro - gas: ${l1.lucroLiquidoUsd.toFixed(3)} (${l1.percentualLiquido.toFixed(2)}%)\n\n`;
 
-        mensagem += `📅 *Ultimos 7 dias*\n`;
+        mensagem += `📅 *Últimos 7 dias*\n`;
         mensagem += `🧾 ${resumo7d.totalOperacoes} operações\n`;
         mensagem += `⛽ ${resumo7d.gasPeriodo.toFixed(3)} POL (${gasUsdresumo7d.toFixed(3)} USD)\n`;
-        mensagem += `📊 Add: +${resumo7d.totalLucroBruto.toFixed(6)} / Remove: ${resumo7d.totalPerdaBruta.toFixed(6)}\n`;
-        mensagem += `💸 Lucro: ${resumo7d.lucroDia.toFixed(6)} - (${resumo7d.percentual.toFixed(2)}%)\n\n`;
+        mensagem += `📊 OP: ${resumo7d.totalLucroBruto.toFixed(3)} | -${resumo7d.totalPerdaBruta.toFixed(3)}\n`;
+        mensagem += `💸 Lucro: ${resumo7d.lucroDia.toFixed(3)} (${resumo7d.percentual.toFixed(2)}%)\n`;
+        mensagem += `💰 Lucro - gas: ${l7.lucroLiquidoUsd.toFixed(3)} (${l7.percentualLiquido.toFixed(2)}%)\n\n`;
 
-        mensagem += `📅 *Ultimo 30 dias*\n`;
+        mensagem += `📅 *Últimos 30 dias*\n`;
         mensagem += `🧾 ${resumo30d.totalOperacoes} operações\n`;
         mensagem += `⛽ ${resumo30d.gasPeriodo.toFixed(3)} POL (${gasUsdresumo30d.toFixed(3)} USD)\n`;
-        mensagem += `📊 Add: +${resumo30d.totalLucroBruto.toFixed(6)} / Remove: ${resumo30d.totalPerdaBruta.toFixed(6)}\n`;
-        mensagem += `💸 Lucro: ${resumo30d.lucroDia.toFixed(6)} - (${resumo30d.percentual.toFixed(2)}%)\n\n`;
-
+        mensagem += `📊 OP: ${resumo30d.totalLucroBruto.toFixed(3)} | -${resumo30d.totalPerdaBruta.toFixed(3)}\n`;
+        mensagem += `💸 Lucro: ${resumo30d.lucroDia.toFixed(3)} (${resumo30d.percentual.toFixed(2)}%)\n`;
+        mensagem += `💰 Lucro - gas: ${l30.lucroLiquidoUsd.toFixed(3)} (${l30.percentualLiquido.toFixed(2)}%)\n\n`;
 
         await ctx.reply(mensagem, { parse_mode: "Markdown" });
     } catch (err) {
