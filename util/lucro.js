@@ -2,6 +2,7 @@ require("dotenv").config();
 const { ethers } = require("ethers");
 const fs = require("fs");
 const path = require("path");
+const { getCMCPrice } = require('./util');
 
 const {
   formatarDataSimples,
@@ -223,11 +224,15 @@ function getResumoPeriodo(dados, dias = 7, incluirHoje = false) {
       capitalInicial: 0,
       capitalFinal: 0,
       percentual: 0,
+
+      // 🔥 Estes campos estavam faltando e estavam quebrando o handler
       totalOperacoes: 0,
       totalLucroBruto: 0,
-      totalPerdaBruta: 0
+      totalPerdaBruta: 0,
+      gasPeriodo: 0,           // <—— ESSENCIAL
     };
   }
+
 
   // agregados do período
   const addRem = filtrados.reduce((acc, x) => acc + x.addRem, 0);
@@ -357,6 +362,9 @@ async function historico(carteira, api, token) {
     const apiKey = api;
     const colateral = token;
 
+    // --- preço do POL em USD ---
+    const polPrice = await getCMCPrice("POL"); // retorna number
+
     const params = new URLSearchParams({
       chainid: '137',
       module: 'account',
@@ -371,14 +379,15 @@ async function historico(carteira, api, token) {
     const response = await fetch(url);
     const data = await response.json();
 
-    console.log(data)
-
     if (!data.result || !Array.isArray(data.result)) {
       return ctx.reply('Erro ao obter transações.');
     }
 
     const resumoPorDia = {};
 
+    // --------------------------
+    // PROCESSAR TRANSAÇÕES
+    // --------------------------
     for (const tx of data.result) {
       const tipo = identificarTipoOperacaoPorNome(tx.functionName);
       if (tipo === 'Desconhecido') continue;
@@ -387,13 +396,43 @@ async function historico(carteira, api, token) {
       const isSaida = tx.from.toLowerCase() === signerAddress.toLowerCase();
       const valor = parseFloat(ethers.formatUnits(tx.value, 6)) * (isSaida ? -1 : 1);
 
+      // inicializar dia
       if (!resumoPorDia[dataChave]) {
-        resumoPorDia[dataChave] = { LiquidityAdd: 0, LiquidityRemove: 0, OpenPosition: 0 };
+        resumoPorDia[dataChave] = {
+          LiquidityAdd: 0,
+          LiquidityRemove: 0,
+          OpenPosition: 0,
+          gasPOL: 0,
+          gasUSD: 0
+        };
       }
+
       resumoPorDia[dataChave][tipo] += valor;
+
+      // ---- cálculo do gas por transação ----
+      const gasUsed = BigInt(tx.gasUsed);
+      const gasPrice = BigInt(tx.gasPrice);
+      const totalWei = gasUsed * gasPrice;
+      const gasPOL = parseFloat(ethers.formatEther(totalWei)) || 0;
+
+      console.log(`\n gaspol: ${gasPOL}`)
+
+      const gasUSD = gasPOL * polPrice;
+
+      resumoPorDia[dataChave].gasPOL += Number(gasPOL);
+      resumoPorDia[dataChave].gasUSD += gasUSD;
+
+      console.log(`\n resumoPorDia[dataChave].gasPOL: ${resumoPorDia[dataChave].gasPOL}`)
     }
 
-    const csv = ['Data;Add/Rem;Capital;Lucro Dia;Lucro total; %'];
+    // --------------------------
+    // GERAR CSV
+    // --------------------------
+
+    const csv = [
+      'Data;Add/Rem;Capital;Lucro Dia;Lucro Total;Gas POL;Gas USD;Liquido Dia;Total Liquido;Per % Liquido'
+    ];
+
     const datas = Object.keys(resumoPorDia).sort((a, b) => {
       const [d1, m1, y1] = a.split('/').map(Number);
       const [d2, m2, y2] = b.split('/').map(Number);
@@ -402,39 +441,55 @@ async function historico(carteira, api, token) {
 
     let capital = 0;
     let lucroTotal = 0;
+    let gasTotalUSD = 0;
+    let capitaldia1 = 0;
 
-    // 🔹 obter o primeiro capital inicial (caso o histórico comece com 0)
+    // Definir capital inicial pela primeira liquidez adicionada
     if (datas.length > 0) {
-      const primeiraData = datas[0];
-      const d0 = resumoPorDia[primeiraData];
-      // se houver adição de liquidez no primeiro dia, usa como capital inicial
-      if (d0.LiquidityAdd > 0) {
-        capitaldia1 = d0.LiquidityAdd;
-      }
+      const d0 = resumoPorDia[datas[0]];
+      if (d0.LiquidityAdd > 0) capitaldia1 = d0.LiquidityAdd;
     }
 
     for (const dataKey of datas) {
-      const { LiquidityAdd, LiquidityRemove, OpenPosition } = resumoPorDia[dataKey];
+      const d = resumoPorDia[dataKey];
 
-      const investimento = LiquidityAdd + LiquidityRemove;
-      const lucro = OpenPosition;
+      const investimento = d.LiquidityAdd + d.LiquidityRemove;
+      const lucro = d.OpenPosition;
 
       const capitalInicialDia = capital > 0 ? capital : capitaldia1;
+
       capital += investimento + lucro;
       lucroTotal += lucro;
 
-      const transacoesDoDia = data.result.filter(tx => {
-        return formatarDataSimples(tx.timeStamp) === dataKey;
-      });
+      // gas acumulado
+      gasTotalUSD += d.gasUSD;
 
-      const percentual = calculaPPT(transacoesDoDia, capitalInicialDia, signerAddress);
-      //const percentual = capital !== 0 ? (lucro / capital) * 100 : 0;
+      // --- liquido ---
+      const lucroLiquidoDia = lucro - d.gasUSD;
+      const lucroTotalLiquido = lucroTotal - gasTotalUSD;
 
-      csv.push(`${dataKey};${investimento.toFixed(2).replace('.', ',')};${capital.toFixed(2).replace('.', ',')};${lucro.toFixed(2).replace('.', ',')};${lucroTotal.toFixed(2).replace('.', ',')};${percentual.toFixed(2).replace('.', ',')}%`);
+      // --- porcentagem líquida ---
+      const percentualLiquido = capitalInicialDia > 0
+        ? (lucroLiquidoDia / capitalInicialDia) * 100
+        : 0;
 
+      console.log(`d.gasPOL ${d.gasPOL}`)
+
+      csv.push(
+        `${dataKey};` +
+        `${investimento.toFixed(2).replace('.', ',')};` +
+        `${capital.toFixed(2).replace('.', ',')};` +
+        `${lucro.toFixed(2).replace('.', ',')};` +
+        `${lucroTotal.toFixed(2).replace('.', ',')};` +
+        `${d.gasPOL.toFixed(3)};` +
+        `${d.gasUSD.toFixed(2).replace('.', ',')};` +
+        `${lucroLiquidoDia.toFixed(2).replace('.', ',')};` +
+        `${lucroTotalLiquido.toFixed(2).replace('.', ',')};` +
+        `${percentualLiquido.toFixed(2).replace('.', ',')}%`
+      );
     }
 
-    console.log(csv);
+    // console.log(csv);
     return csv;
 
   } catch (err) {

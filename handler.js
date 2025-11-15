@@ -69,28 +69,22 @@ async function ajudaHandler(ctx) {
 
     await ctx.replyWithMarkdown(
         "2️⃣ *RPC da Polygon*\n" +
-        "É o servidor usado pelo bot para se conectar à rede Polygon.\n\n" +
-        "🔗 Recomendado:\n" +
+        "É o servidor usado pelo bot para se conectar à rede Polygon.Exemplo:\n" +
         "`https://polygon-rpc.com`\n\n" +
-        "🔄 Alternativas:\n" +
-        "- `https://rpc.ankr.com/polygon`\n" +
-        "- `https://polygon.llamarpc.com`\n" +
-        "- `https://rpc-mainnet.maticvigil.com`\n\n" +
-        "🧠RPC Privado (gratis) recomendado\n" +
+        "🔗 Recomendado:\n" +
         "Crie uma conta gratuita e obtenha um RPC em sites como:\n" +
         "*- Infura*\n" +
         "*- Alchemy*\n"
     );
 
     await ctx.replyWithMarkdown(
-        "3️⃣ *PolygonScan API Key*\n" +
+        "3️⃣ *Etherscan V2*\n" +
         "Permite ao bot consultar suas transações diretamente na blockchain.\n\n" +
         "🔑 Como obter:\n" +
-        "1. Acesse: [polygonscan.com/myapikey](https://polygonscan.com/myapikey)\n" +
+        "1. Acesse: [https://etherscan.io/apidashboard](https://etherscan.io/apidashboard)\n" +
         "2. Faça login ou crie uma conta gratuita\n" +
         "3. Clique em *Add* ou *Create API Key*\n" +
         "4. Copie a chave gerada e salve no bot\n\n" +
-        "📌 Exemplo de chave: `ABC123XYZ456POLYGONKEY789`\n" +
         "📶 Essa chave é gratuita e segura."
     );
 
