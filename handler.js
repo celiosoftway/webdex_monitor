@@ -2,7 +2,7 @@ require("dotenv").config();
 const { Markup } = require("telegraf");
 const User = require("./models/User");
 const { getHistoricoDados, getResumoPeriodo, historico } = require("./util/lucro");
-const { getCMCPrice } = require('./util/util');
+const { getCMCPrice, getCachedCMCPrice } = require('./util/util');
 
 // teclado do bot
 const keyboard = Markup.keyboard([
@@ -126,7 +126,7 @@ async function lucroHandler(ctx) {
     const colateral = process.env.TOKEN_COLATERAL_ADDRESS;
 
     try {
-        const polUsdPrice = await getCMCPrice("POL", "USD");
+        const polUsdPrice = await getCachedCMCPrice();
 
         const { resultado: dados, lucro24h } = await getHistoricoDados(carteira, apikey, colateral);
         const resumo0d = getResumoPeriodo(dados, 0);

@@ -1,5 +1,7 @@
 
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
 
 function formatarDataSimples(timestamp) {
   const date = new Date(timestamp * 1000);
@@ -40,7 +42,8 @@ async function getCMCPrice(crypto = "POL", convert = "USD") {
     const { data } = await axios.get(url, {
       params: { symbol: crypto, convert },
       headers: {
-        "X-CMC_PRO_API_KEY": "6cc6d57b-3db2-4e18-84f7-52b7a2c853bc",
+        //"X-CMC_PRO_API_KEY": "6cc6d57b-3db2-4e18-84f7-52b7a2c853bc",
+        "X-CMC_PRO_API_KEY": "3b77ca381e5d4ed9ae64138f743e11a7",
         "Accept": "application/json",
       },
     });
@@ -54,11 +57,67 @@ async function getCMCPrice(crypto = "POL", convert = "USD") {
   }
 }
 
+
+
+
+
+
+
+const CACHE_FILE = path.join(process.cwd(), "pol_price.json");
+const CACHE_TTL_HOURS = 6; // atualizar a cada 6h
+
+async function fetchCMCPrice(crypto = "POL", convert = "USD") {
+  const url = "https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest";
+
+  try {
+    const { data } = await axios.get(url, {
+      params: { symbol: crypto, convert },
+      headers: {
+        "X-CMC_PRO_API_KEY": process.env.CMC_API_KEY,
+        "Accept": "application/json",
+      },
+    });
+
+    return data.data[crypto].quote[convert].price;
+  } catch (error) {
+    console.error("Erro ao obter preço:", error.response?.data || error.message);
+    return null;
+  }
+}
+
+async function getCachedCMCPrice() {
+  const now = Date.now();
+
+  // Verifica se o cache existe
+  if (fs.existsSync(CACHE_FILE)) {
+    const cached = JSON.parse(fs.readFileSync(CACHE_FILE, "utf8"));
+    const ageHours = (now - cached.timestamp) / (1000 * 60 * 60);
+
+    if (ageHours < CACHE_TTL_HOURS && cached.price) {
+      // Cache válido → retorna imediatamente
+      return cached.price;
+    }
+  }
+
+  // Se chegou aqui → precisa atualizar
+  const price = await fetchCMCPrice("POL", "USD");
+
+  if (price) {
+    fs.writeFileSync(
+      CACHE_FILE,
+      JSON.stringify({ price, timestamp: now }, null, 2)
+    );
+  }
+
+  return price;
+}
+
 // (async() => {  const price = await getCMCPrice();})()
 
 module.exports = {
     formatarData,
     formatarDataSimples,
     identificarTipoOperacaoPorNome,
-    getCMCPrice
+    getCMCPrice,
+    getCachedCMCPrice
 };

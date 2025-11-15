@@ -22,7 +22,7 @@ const {
     csvHandler } = require("./handler");
 
 const { getTokenTransactions, decodeTransactionInput } = require("./util/contrato");
-const { formatarData, getCMCPrice } = require("./util/util");
+const { formatarData, getCMCPrice, getCachedCMCPrice } = require("./util/util");
 
 // Inicializar DB
 (async () => {
@@ -98,12 +98,12 @@ async function monitorarOpenPositions() {
                 );
 
                 const novas = transacoes.filter(tx =>
-                    tx.functionName === "openPosition" &&     // garantir que é openPosition
+                    tx.functionName === "openPosition" &&    
                     !notificados.has(tx.transactionHash) &&
                     tx.timestamp >= inicioMonitoramento
                 );
 
-                const polUsdPrice = await getCMCPrice("POL", "USD");
+                const polUsdPrice = await getCachedCMCPrice();
 
                 for (const tx of novas) {
                     const perdaIcone = tx.amount.startsWith("-") ? "🔻 " : "";
