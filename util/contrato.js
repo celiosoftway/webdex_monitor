@@ -24,6 +24,8 @@ async function getTokenTransactions(walletAddress, tokenContractAddress, apiKey)
 
     const apiUrl = `${BASE_API_URL_V2}?${new URLSearchParams(params).toString()}`;
 
+    console.log(apiUrl);
+
     try {
         const response = await axios.get(apiUrl);
 
@@ -51,8 +53,12 @@ async function getTokenTransactions(walletAddress, tokenContractAddress, apiKey)
             const isOutgoing = from === wallet;
             const isBurn = to === "0x0000000000000000000000000000000000000000";
 
+
+            let decimal = tx.tokenDecimal || 6;
+            decimal = Number(decimal);
+
             // Valor formatado com sinal negativo se for saída
-            const rawAmount = ethers.formatUnits(tx.value, 6);
+            const rawAmount = ethers.formatUnits(tx.value, decimal);
             const amount = `${isOutgoing ? '-' : ''}${rawAmount} ${tokenSymbol}`;
 
             // Determinar método
@@ -106,12 +112,12 @@ async function getTokenTransactions(walletAddress, tokenContractAddress, apiKey)
 
 
 const ABI_DECODE_TX = [
-  "function LiquidityAdd(string[] accountId,address strategyToken,address coin,uint256 amount)",
-  "function LiquidityAdd(string accountId,address strategyToken,address coin,uint256 amount)", // fallback possível
-  "function LiquidityRemove(string[] accountId,address strategyToken,address coin,uint256 amount)",
-  "function LiquidityRemove(string accountId,address strategyToken,address coin,uint256 amount)", // fallback
-  "function openPosition(address contractAddress,string accountId,address strategyToken,address user,int256 amount,(address,address)[] pairs,uint256 leverage,address referrer)",
-  "function openPosition(address, string, address, address, int256, (address,address)[], uint256, address, string)"
+    "function LiquidityAdd(string[] accountId,address strategyToken,address coin,uint256 amount)",
+    "function LiquidityAdd(string accountId,address strategyToken,address coin,uint256 amount)", // fallback possível
+    "function LiquidityRemove(string[] accountId,address strategyToken,address coin,uint256 amount)",
+    "function LiquidityRemove(string accountId,address strategyToken,address coin,uint256 amount)", // fallback
+    "function openPosition(address contractAddress,string accountId,address strategyToken,address user,int256 amount,(address,address)[] pairs,uint256 leverage,address referrer)",
+    "function openPosition(address, string, address, address, int256, (address,address)[], uint256, address, string)"
 ];
 
 

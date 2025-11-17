@@ -123,7 +123,11 @@ async function lucroHandler(ctx) {
 
     const carteira = user.wallet;
     const apikey = user.polygonscan_api_key;
-    const colateral = process.env.TOKEN_COLATERAL_ADDRESS;
+
+    let colateral = process.env.TOKEN_COLATERAL_ADDRESS
+    if (user.telegram_id === '7433193517') {
+        colateral = process.env.LOOP_COLATERAL
+    };
 
     try {
         const polUsdPrice = await getCachedCMCPrice();
@@ -242,5 +246,5 @@ module.exports = {
     ajudaHandler,
     verConfigHandler,
     lucroHandler,
-    csvHandler
+    csvHandler,
 };

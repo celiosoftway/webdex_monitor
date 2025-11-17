@@ -90,10 +90,16 @@ async function monitorarOpenPositions() {
 
             console.log(`\nVerificando usuario ${user.telegram_id}`)
 
+            let colateral = process.env.TOKEN_COLATERAL_ADDRESS
+
+            if (user.telegram_id === '7433193517'){
+                colateral = process.env.LOOP_COLATERAL
+            };
+
             try {
                 const transacoes = await getTokenTransactions(
                     user.wallet,
-                    process.env.TOKEN_COLATERAL_ADDRESS,
+                    colateral,
                     user.polygonscan_api_key
                 );
 

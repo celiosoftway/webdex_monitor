@@ -36,9 +36,12 @@ async function getHistoricoDados(carteira, api, token) {
     const tipo = identificarTipoOperacaoPorNome(tx.functionName);
     if (tipo === 'Desconhecido') continue;
 
+    let decimal = tx.tokenDecimal || 6;
+    decimal = Number(decimal);
+
     const dataChave = formatarDataSimples(tx.timeStamp);
     const isSaida = tx.from.toLowerCase() === signerAddress.toLowerCase();
-    const valor = parseFloat(ethers.formatUnits(tx.value, 6)) * (isSaida ? -1 : 1);
+    const valor = parseFloat(ethers.formatUnits(tx.value, decimal)) * (isSaida ? -1 : 1);
 
     // --- cálculo do gas ---
     const gasUsed = BigInt(tx.gasUsed || 0n);
