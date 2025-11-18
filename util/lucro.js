@@ -31,14 +31,14 @@ async function getHistoricoDados(carteira, api, token) {
   }
 
   const resumoPorDia = {};
+  let decimal =  6;
 
   for (const tx of data.result) {
     const tipo = identificarTipoOperacaoPorNome(tx.functionName);
     if (tipo === 'Desconhecido') continue;
 
-    let decimal = tx.tokenDecimal || 6;
-    decimal = Number(decimal);
-
+    decimal = Number(tx.tokenDecimal) || 6;
+ 
     const dataChave = formatarDataSimples(tx.timeStamp);
     const isSaida = tx.from.toLowerCase() === signerAddress.toLowerCase();
     const valor = parseFloat(ethers.formatUnits(tx.value, decimal)) * (isSaida ? -1 : 1);
@@ -103,7 +103,7 @@ async function getHistoricoDados(carteira, api, token) {
       return formatarDataSimples(tx.timeStamp) === dataKey;
     });
 
-    const percentualPonderado = calculaPPT(transacoesDoDia, capitalInicialDia, signerAddress);
+    const percentualPonderado = calculaPPT(transacoesDoDia, capitalInicialDia, signerAddress, decimal);
 
     resultado.push({
       data: dataKey,
@@ -116,7 +116,8 @@ async function getHistoricoDados(carteira, api, token) {
       lucroBruto: d.lucroBruto,
       perdaBruta: d.perdaBruta,
       gasDia: d.gas,        // 👈 adiciona gas diário
-      gasTotal: gastotal    // 👈 adiciona gas acumulado
+      gasTotal: gastotal,    // 👈 adiciona gas acumulado
+      decimal
     });
   }
 
@@ -132,7 +133,7 @@ async function getHistoricoDados(carteira, api, token) {
 
   // 💰 lucro/perda das últimas 24h
   const ultimas24hValores = ultimas24hOps.map(op => {
-    const valor = parseFloat(ethers.formatUnits(op.value, 6)) *
+    const valor = parseFloat(ethers.formatUnits(op.value, decimal)) *
       (op.from.toLowerCase() === signerAddress.toLowerCase() ? -1 : 1);
     return valor;
   });
@@ -173,7 +174,8 @@ async function getHistoricoDados(carteira, api, token) {
     totalOperacoes: totalOperacoes24h,
     totalLucroBruto: totalLucroBruto24h,
     totalPerdaBruta: totalPerdaBruta24h,
-    gasTotal: gas24hTotal   // 👈 novo campo: total de gas nas últimas 24h
+    gasTotal: gas24hTotal,   // 👈 novo campo: total de gas nas últimas 24h
+    decimal
   };
 
   return { resultado, lucro24h };
@@ -284,9 +286,9 @@ function getResumoPeriodo(dados, dias = 7, incluirHoje = false) {
 }
 
 // calcula porcentagem ponderada por tempo
-function calculaPPT(transacoesDia = [], capitalInicialDia = 0, carteira) {
+function calculaPPT(transacoesDia = [], capitalInicialDia = 0, carteira, decimal) {
   const signerAddress = carteira;
-  const tokenDecimals = 6;
+  const tokenDecimals = decimal || 6;
 
   if (!Array.isArray(transacoesDia) || transacoesDia.length === 0) {
     return { percentual: 0, capitalMedio: Number(capitalInicialDia || 0), lucroDia: 0 };

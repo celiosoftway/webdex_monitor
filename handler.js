@@ -131,7 +131,7 @@ async function lucroHandler(ctx) {
 
     try {
         const polUsdPrice = await getCachedCMCPrice();
-
+ 
         const { resultado: dados, lucro24h } = await getHistoricoDados(carteira, apikey, colateral);
         const resumo0d = getResumoPeriodo(dados, 0);
         const resumo1d = getResumoPeriodo(dados, 1);
