@@ -8,7 +8,7 @@ const { getCMCPrice, getCachedCMCPrice } = require('./util/util');
 const keyboard = Markup.keyboard([
     ["📈 Lucro", "📊 Gerar CSV",],
     ["👛 Configurar", "📋 Ver Config"],
-    ["🧠 Ajuda"]
+    ["🧠 Ajuda","💬 Grupo Help"]
 ]).resize();
 
 

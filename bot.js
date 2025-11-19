@@ -56,6 +56,9 @@ bot.hears("📋 Ver Config", verConfigHandler);
 bot.hears("📈 Lucro", lucroHandler);
 bot.hears("📊 Gerar CSV", csvHandler);
 
+let helpGroup = `[Grupo para dúvidas](https://t.me/+y9SU2a60q_s5Mzkx)\n\n`;
+bot.hears("💬 Grupo Help", (ctx) => ctx.reply(helpGroup, { parse_mode: "Markdown" }));
+
 bot.hears("👛 Configurar", async (ctx) => {
     return ctx.reply("⚙️ Escolha o que deseja configurar:", Markup.inlineKeyboard([
         [Markup.button.callback("👛 Carteira", "configCarteira")],
