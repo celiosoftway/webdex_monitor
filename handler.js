@@ -1,5 +1,6 @@
 require("dotenv").config();
 const { Markup } = require("telegraf");
+const axios = require('axios');
 const User = require("./models/User");
 const { getHistoricoDados, getResumoPeriodo, historico } = require("./util/lucro");
 const { getCMCPrice, getCachedCMCPrice } = require('./util/util');
@@ -8,7 +9,7 @@ const { getCMCPrice, getCachedCMCPrice } = require('./util/util');
 const keyboard = Markup.keyboard([
     ["📈 Lucro", "📊 Gerar CSV",],
     ["👛 Configurar", "📋 Ver Config"],
-    ["🧠 Ajuda","💬 Grupo Help"]
+    ["🧠 Ajuda", "💬 Grupo Help"]
 ]).resize();
 
 
@@ -131,7 +132,7 @@ async function lucroHandler(ctx) {
 
     try {
         const polUsdPrice = await getCachedCMCPrice();
- 
+
         const { resultado: dados, lucro24h } = await getHistoricoDados(carteira, apikey, colateral);
         const resumo0d = getResumoPeriodo(dados, 0);
         const resumo1d = getResumoPeriodo(dados, 1);
@@ -241,10 +242,108 @@ async function csvHandler(ctx) {
     }
 }
 
+async function testApiHandler(ctx) {
+    const telegram_id = ctx.from.id.toString();
+    const user = await User.findOne({ where: { telegram_id } });
+
+    // 🔹 Verificações de configuração
+    if (!user || !user.wallet) {
+        return ctx.reply("❌ Você precisa configurar sua carteira usando /config");
+    }
+
+    if (!user.rpc_url) {
+        return ctx.reply("❌ Você precisa configurar o RPC usando /config");
+    }
+
+    if (!user.polygonscan_api_key) {
+        return ctx.reply("❌ Você precisa configurar sua chave *PolygonScan API* usando /config");
+    }
+
+    const carteira = user.wallet;
+    const apikey = user.polygonscan_api_key;
+    const colateral = process.env.TOKEN_COLATERAL_ADDRESS;
+
+    const BASE_API_URL_V2 = "https://api.etherscan.io/v2/api";
+    const POLYGON_CHAIN_ID = 137;
+
+    const params = {
+        chainid: POLYGON_CHAIN_ID,
+        module: "account",
+        action: "tokentx",
+        address: carteira,
+        contractaddress: colateral,
+        sort: "desc",
+        apikey: apikey
+    };
+
+    const apiUrl = `${BASE_API_URL_V2}?${new URLSearchParams(params).toString()}`;
+
+    try {
+        const { data } = await axios.get(apiUrl);
+
+        // ------------------------------------------
+        // 🔍 TRATAMENTO DOS CASOS
+        // ------------------------------------------
+
+        // ❌ API key inválida
+        if (data.status === "0" && data.message.includes("Invalid API Key")) {
+            return ctx.reply(
+                `❌ *API Key inválida*\n` +
+                `Verifique se você colou a chave correta.\n\n` +
+                `🔗 [Abrir PolygonScan](https://polygonscan.com/myapikey)`,
+                { parse_mode: "Markdown" }
+            );
+        }
+
+        // ❌ Nenhuma transação encontrada
+        if (data.status === "0" && data.message === "No transactions found") {
+            return ctx.reply(
+                `ℹ️ Sua configuração está *válida*, mas não encontrei transações deste token.\n\n` +
+                `🔗 [Verificar carteira no PolygonScan](https://polygonscan.com/address/${carteira})`,
+                { parse_mode: "Markdown" }
+            );
+        }
+
+        // ❌ Qualquer erro inesperado
+        if (data.status === "0") {
+            return ctx.reply(
+                `⚠️ *A API retornou um erro*\n` +
+                `Mensagem: _${data.message}_\n\n` +
+                `🔗 [Ver detalhes no PolygonScan](https://polygonscan.com/address/${carteira})`,
+                { parse_mode: "Markdown" }
+            );
+        }
+
+        // ✅ Ok — transações encontradas
+        if (data.status === "1") {
+            return ctx.reply(
+                `✅ *Conexão bem-sucedida!*\n` +
+                `Foram encontradas *${data.result.length} transações*.\n\n` +
+                `🔗 [Ver transações no PolygonScan](https://polygonscan.com/token/${colateral}?a=${carteira})`,
+                { parse_mode: "Markdown" }
+            );
+        }
+
+        // 🟡 fallback improvável
+        return ctx.reply("⚠️ Resposta inesperada da API. Tente novamente mais tarde.");
+
+    } catch (error) {
+        console.error("Erro ao consultar API:", error);
+
+        return ctx.reply(
+            `❌ *Erro ao consultar API*\n` +
+            `Verifique sua conexão ou tente novamente mais tarde.`,
+            { parse_mode: "Markdown" }
+        );
+    }
+}
+
+
 module.exports = {
     startHandler,
     ajudaHandler,
     verConfigHandler,
     lucroHandler,
     csvHandler,
+    testApiHandler
 };

@@ -19,7 +19,9 @@ const {
     ajudaHandler,
     verConfigHandler,
     lucroHandler,
-    csvHandler } = require("./handler");
+    csvHandler,
+    testApiHandler
+} = require("./handler");
 
 const { getTokenTransactions, decodeTransactionInput } = require("./util/contrato");
 const { formatarData, getCMCPrice, getCachedCMCPrice } = require("./util/util");
@@ -44,10 +46,12 @@ bot.use(stage.middleware());
 bot.telegram.setMyCommands([
     { command: 'start', description: 'inicia o teclado' },
     { command: 'config_contas', description: 'Configura contas' },
+    { command: 'test_api', description: 'Executa teste de consulta' },
 ]);
 
 // Comandos, será chamado a função do handler
 bot.command("start", startHandler);
+bot.command("test_api", testApiHandler);
 bot.command("config_contas", (ctx) => ctx.scene.enter("config-contas"));
 
 // hears executa quando digitado o texto monitorado, neste caso o texto vem do keyboard
@@ -95,7 +99,7 @@ async function monitorarOpenPositions() {
 
             let colateral = process.env.TOKEN_COLATERAL_ADDRESS
 
-            if (user.telegram_id === '7433193517'){
+            if (user.telegram_id === '7433193517') {
                 colateral = process.env.LOOP_COLATERAL
             };
 
@@ -107,7 +111,7 @@ async function monitorarOpenPositions() {
                 );
 
                 const novas = transacoes.filter(tx =>
-                    tx.functionName === "openPosition" &&    
+                    tx.functionName === "openPosition" &&
                     !notificados.has(tx.transactionHash) &&
                     tx.timestamp >= inicioMonitoramento
                 );
