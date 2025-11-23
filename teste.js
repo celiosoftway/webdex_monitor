@@ -2,9 +2,10 @@ require("dotenv").config();
 const { getHistoricoDados, getResumoPeriodo, historico } = require("./util/lucro");
 const { getCMCPrice, getCachedCMCPrice } = require('./util/util');
 
-const carteira = '0x62f9db5706a9ffac7696ce1ad2e1e75010f824cb';
+const carteira = '0xbDb9d76E9917a4A6993A9D66cDEF5F42F07f3234';
 const apikey = 'NC1JUZZWX9Y4JPC6IP852GHG1ISF17TVWM';
-const colateral = '0xb56032d0b576472b3f0f1e4747f488769de2b00b';
+const colateral = '0xfb2e2ff7b51c2bcaf58619a55e7d2ff88cfd8aca';
+
 
 // cálculo do lucro líquido e percentual ajustado
 function getLucroLiquido(resumo, gasUsd) {
@@ -18,14 +19,14 @@ function getLucroLiquido(resumo, gasUsd) {
 (async () => {
     const polUsdPrice = await getCachedCMCPrice();
 
-    const { resultado: dados, lucro24h } = await getHistoricoDados(carteira, apikey, process.env.LOOP_COLATERAL);
-    console.log(dados)
-    console.log(lucro24h)
-
+    const { resultado: dados, lucro24h } = await getHistoricoDados(carteira, apikey, colateral);
+ 
     const resumo0d = getResumoPeriodo(dados, 0);
     const resumo1d = getResumoPeriodo(dados, 1);
     const resumo7d = getResumoPeriodo(dados, 7);
     const resumo30d = getResumoPeriodo(dados, 30);
+
+    console.log(resumo1d)
 
     const gasUsdresumo0d = resumo0d.gasPeriodo * polUsdPrice;
     const gasUsdlucro24h = lucro24h.gasTotal * polUsdPrice;
