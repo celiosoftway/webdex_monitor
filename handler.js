@@ -1,9 +1,15 @@
 require("dotenv").config();
 const { Markup } = require("telegraf");
 const axios = require('axios');
+const fs = require('fs').promises;
+const path = require('path');
+
 const User = require("./models/User");
 const { getHistoricoDados, getResumoPeriodo, historico } = require("./util/lucro");
 const { getCMCPrice, getCachedCMCPrice } = require('./util/util');
+const { getProtocolSpeed, formatProtocolSpeed } = require("./util/defi_speed")
+
+const FILE_PATH = path.resolve('./unique_holders_24h.json');
 
 // teclado do bot
 const keyboard = Markup.keyboard([
@@ -11,8 +17,6 @@ const keyboard = Markup.keyboard([
     ["👛 Configurar", "📋 Ver Config"],
     ["🧠 Ajuda", "💬 Grupo Help"]
 ]).resize();
-
-
 
 // comando start, envia uma mensagem em privato
 async function startHandler(ctx) {
@@ -338,6 +342,34 @@ async function testApiHandler(ctx) {
     }
 }
 
+async function defiSpeedHandler(ctx) {
+    try {
+        const data = await fs.readFile(FILE_PATH, 'utf-8');
+        const json = JSON.parse(data);
+
+        // 1) obter número total de contas
+        const total = json.uniqueHolders || 1;
+
+        // 2) medir velocidade do protocolo
+        const speed = await getProtocolSpeed(total);
+        const formata = await formatProtocolSpeed(speed, total)
+
+        // console.log("Total contas:", total);
+        console.log(formata);
+
+        return ctx.reply(
+            `${formata}\n`,
+            { parse_mode: "Markdown" }
+        );
+
+    } catch (error) {
+        return ctx.reply(
+            `❌ *Erro ao estimar o ciclo*\n` +
+            `Verifique sua conexão ou tente novamente mais tarde.`,
+            { parse_mode: "Markdown" }
+        );
+    }
+}
 
 module.exports = {
     startHandler,
@@ -345,5 +377,6 @@ module.exports = {
     verConfigHandler,
     lucroHandler,
     csvHandler,
-    testApiHandler
+    testApiHandler,
+    defiSpeedHandler
 };

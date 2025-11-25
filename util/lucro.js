@@ -502,7 +502,6 @@ async function historico(carteira, api, token) {
   }
 }
 
-
 module.exports = {
   getResumoPeriodo,
   getHistoricoDados,

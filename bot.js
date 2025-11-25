@@ -5,6 +5,7 @@ const { Telegraf, Scenes, session, Markup } = require("telegraf");
 const sequelize = require("./db/database");
 const User = require("./models/User");
 const AccountAlias = require("./models/AccountAlias");
+const { iniciarTotalContas } = require("./util/defi_speed")
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
@@ -20,7 +21,8 @@ const {
     verConfigHandler,
     lucroHandler,
     csvHandler,
-    testApiHandler
+    testApiHandler,
+    defiSpeedHandler
 } = require("./handler");
 
 const { getTokenTransactions, decodeTransactionInput } = require("./util/contrato");
@@ -47,11 +49,13 @@ bot.telegram.setMyCommands([
     { command: 'start', description: 'inicia o teclado' },
     { command: 'config_contas', description: 'Configura contas' },
     { command: 'test_api', description: 'Executa teste de consulta' },
+    { command: 'defi_speed', description: 'Estima o tempo do ciclo' },
 ]);
 
 // Comandos, será chamado a função do handler
 bot.command("start", startHandler);
 bot.command("test_api", testApiHandler);
+bot.command("defi_speed", defiSpeedHandler);
 bot.command("config_contas", (ctx) => ctx.scene.enter("config-contas"));
 
 // hears executa quando digitado o texto monitorado, neste caso o texto vem do keyboard
@@ -185,5 +189,10 @@ bot.catch((err, ctx) => {
     console.log("🤖 Bot rodando com Scenes...");
 
     monitorarOpenPositions();
+
+    setTimeout(() => {
+        iniciarTotalContas();
+    }, 10_000);
+
     setInterval(monitorarOpenPositions, 60000); // 30.000ms = 30s
 })();

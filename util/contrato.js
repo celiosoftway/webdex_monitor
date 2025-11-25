@@ -123,7 +123,7 @@ const ABI_DECODE_TX = [
 
 // Função que busca e decodifica input data
 async function decodeTransactionInput(txHash, provider1) {
-    console.log("⚙️ Executando decodeTransactionInput");
+    // console.log("⚙️ Executando decodeTransactionInput");
 
     try {
         const tx = await provider_decode.getTransaction(txHash);
