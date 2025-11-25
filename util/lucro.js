@@ -23,22 +23,42 @@ async function getHistoricoDados(carteira, api, token) {
     apikey: apiKey
   });
 
+  const fetchTransactions = async (startBlock) => {
+    params.set('startblock', startBlock);
     const url = `https://api.etherscan.io/v2/api?${params.toString()}`;
     const response = await fetch(url);
     const data = await response.json();
+
     if (!data.result || !Array.isArray(data.result)) {
       throw new Error("Erro ao obter transações.");
     }
 
-  const resumoPorDia = {};
-  let decimal =  6;
+    return data.result;
+  };
 
-  for (const tx of data.result) {
+  let allTransactions = [];
+  let lastBlock = 0;
+
+  // Primeira consulta
+  let transactions = await fetchTransactions(0);  // Começa do bloco 0 ou do bloco inicial desejado
+  allTransactions.push(...transactions);
+
+  while (transactions.length === 10000) {  // Limite máximo da API
+    lastBlock = parseInt(transactions[transactions.length - 1].blockNumber);
+    const nextStartBlock = lastBlock + 1;  // O próximo bloco após o último retornado
+    transactions = await fetchTransactions(nextStartBlock);
+    allTransactions.push(...transactions);
+  }
+
+  // Agora você tem todas as transações, vamos processá-las.
+  const resumoPorDia = {};
+  let decimal = 6;
+
+  for (const tx of allTransactions) {
     const tipo = identificarTipoOperacaoPorNome(tx.functionName);
     if (tipo === 'Desconhecido') continue;
 
     decimal = Number(tx.tokenDecimal) || 6;
- 
     const dataChave = formatarDataSimples(tx.timeStamp);
     const isSaida = tx.from.toLowerCase() === signerAddress.toLowerCase();
     const valor = parseFloat(ethers.formatUnits(tx.value, decimal)) * (isSaida ? -1 : 1);
@@ -99,7 +119,7 @@ async function getHistoricoDados(carteira, api, token) {
     lucroTotal += lucro;
     gastotal += d.gas;
 
-    const transacoesDoDia = data.result.filter(tx => {
+    const transacoesDoDia = allTransactions.filter(tx => {
       return formatarDataSimples(tx.timeStamp) === dataKey;
     });
 
@@ -122,11 +142,10 @@ async function getHistoricoDados(carteira, api, token) {
   }
 
   // --- cálculo das últimas 24h ---
-  // ---- Lucro e gas das últimas 24h ----
-  const agora = Math.floor(Date.now() / 1000);
-  const limite24h = agora - 24 * 60 * 60;
+  const agora = Math.floor(Date.now() / 1000); // Timestamp atual
+  const limite24h = agora - 24 * 60 * 60;  // Timestamp de 24 horas atrás
 
-  const ultimas24hOps = data.result.filter(op => {
+  const ultimas24hOps = allTransactions.filter(op => {
     const tipo = identificarTipoOperacaoPorNome(op.functionName);
     return tipo === "OpenPosition" && Number(op.timeStamp) >= limite24h;
   });
@@ -178,7 +197,7 @@ async function getHistoricoDados(carteira, api, token) {
     decimal
   };
 
-  return { resultado, lucro24h };
+  return { resultado, lucro24h };  // Retorna o resultado e os dados das últimas 24h
 }
 
 
@@ -501,6 +520,7 @@ async function historico(carteira, api, token) {
     console.error("Erro ao exibir histórico:", err);
   }
 }
+
 
 module.exports = {
   getResumoPeriodo,
