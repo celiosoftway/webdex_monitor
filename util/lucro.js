@@ -23,12 +23,12 @@ async function getHistoricoDados(carteira, api, token) {
     apikey: apiKey
   });
 
-  const url = `https://api.etherscan.io/v2/api?${params.toString()}`;
-  const response = await fetch(url);
-  const data = await response.json();
-  if (!data.result || !Array.isArray(data.result)) {
-    throw new Error("Erro ao obter transações.");
-  }
+    const url = `https://api.etherscan.io/v2/api?${params.toString()}`;
+    const response = await fetch(url);
+    const data = await response.json();
+    if (!data.result || !Array.isArray(data.result)) {
+      throw new Error("Erro ao obter transações.");
+    }
 
   const resumoPorDia = {};
   let decimal =  6;
