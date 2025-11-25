@@ -206,7 +206,7 @@ function iniciarTotalContas() {
     console.log("🔄 Iniciando contagem de contas...");
 
     cron.schedule(
-        '12 21 * * *',
+        '00 08 * * *',
         async () => {
             console.log(`[${new Date().toLocaleString('pt-BR')}] Disparando cron...`);
             try {
