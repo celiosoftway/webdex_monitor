@@ -5,9 +5,13 @@ const { Telegraf, Scenes, session, Markup } = require("telegraf");
 const sequelize = require("./db/database");
 const User = require("./models/User");
 const AccountAlias = require("./models/AccountAlias");
-const { iniciarTotalContas } = require("./util/defi_speed")
+const { 
+    iniciarTotalContas, 
+    getUniqueHoldersLast24h 
+} = require("./util/defi_speed")
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
+const OWNER_ID = process.env.OWNER_ID;
 
 // scenes
 const carteiraScene = require("./scenes/configCarteiraScene");
@@ -58,6 +62,19 @@ bot.command("test_api", testApiHandler);
 bot.command("defi_speed", defiSpeedHandler);
 bot.command("config_contas", (ctx) => ctx.scene.enter("config-contas"));
 
+// 🔒 Middleware: restringe acesso ao OWNER_ID
+bot.use(async (ctx, next) => {
+    console.log(ctx)
+    if (ctx.from?.id !== OWNER_ID) {
+        bot.command("getcontas", (ctx) => {
+            getUniqueHoldersLast24h();
+
+            ctx.reply("Iniciado contagem");
+        });
+    }
+    return next();
+});
+
 // hears executa quando digitado o texto monitorado, neste caso o texto vem do keyboard
 bot.hears("🧠 Ajuda", ajudaHandler);
 bot.hears("📋 Ver Config", verConfigHandler);
@@ -103,7 +120,7 @@ async function monitorarOpenPositions() {
 
             let colateral = process.env.TOKEN_COLATERAL_ADDRESS
 
-            if (user.telegram_id === '7433193517') {
+            if (user.telegram_id === '7433193517000') {
                 colateral = process.env.LOOP_COLATERAL
             };
 

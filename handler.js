@@ -130,7 +130,7 @@ async function lucroHandler(ctx) {
     const apikey = user.polygonscan_api_key;
 
     let colateral = process.env.TOKEN_COLATERAL_ADDRESS
-    if (user.telegram_id === '7433193517') {
+    if (user.telegram_id === '7433193517000') {
         colateral = process.env.LOOP_COLATERAL
     };
 
