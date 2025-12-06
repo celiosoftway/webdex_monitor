@@ -127,7 +127,7 @@ function formatHours(decimalHours) {
 
 async function getProtocolSpeed(totalAccounts) {
     const endBlock = await provider.getBlockNumber();
-    const startBlock = endBlock - 300;
+    const startBlock = endBlock - 500;
 
     const params = new URLSearchParams({
         chainid: '137',
@@ -159,11 +159,31 @@ async function getProtocolSpeed(totalAccounts) {
         };
     }
 
+    // ✅ FILTRO BARATO POR FUNÇÃO
+    const openPositions = txList.filter(tx => {
+        const tipo = identificarTipoOperacaoPorNome(tx.functionName);
+        return tipo === 'OpenPosition';
+    });
+
+    const activeTx = openPositions.length;
+
+    if (activeTx === 0) {
+        return {
+            startBlock,
+            endBlock,
+            minutesInterval: 0,
+            activeTx: 0,
+            txPerMinute: 0,
+            cycleMinutes: Infinity,
+            cycleHours: Infinity
+        };
+    }
+
     const blockStart = await provider.getBlock(startBlock);
     const blockEnd = await provider.getBlock(endBlock);
 
     const minutes = (blockEnd.timestamp - blockStart.timestamp) / 60;
-    const txPerMinute = txList.length / minutes;
+    const txPerMinute = activeTx / minutes;
 
     const cycleMinutes = totalAccounts / txPerMinute;
     const cycleHours = cycleMinutes / 60;
@@ -172,12 +192,23 @@ async function getProtocolSpeed(totalAccounts) {
         startBlock,
         endBlock,
         minutesInterval: Number(minutes.toFixed(2)),
-        activeTx: txList.length,
+        activeTx,
         txPerMinute: Number(txPerMinute.toFixed(4)),
         cycleMinutes: Number(cycleMinutes.toFixed(2)),
         cycleHours: Number(cycleHours.toFixed(2))
     };
 }
+
+function identificarTipoOperacaoPorNome(functionName = '') {
+  const name = functionName.toLowerCase();
+
+  if (name.includes('liquidityadd')) return 'LiquidityAdd';
+  if (name.includes('liquidityremove')) return 'LiquidityRemove';
+  if (name.includes('openposition')) return 'OpenPosition';
+
+  return 'Desconhecido';
+}
+
 
 async function formatProtocolSpeed(result, totalAccounts) {
     return `

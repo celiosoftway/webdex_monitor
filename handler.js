@@ -352,6 +352,8 @@ async function defiSpeedHandler(ctx) {
 
         // 2) medir velocidade do protocolo
         const speed = await getProtocolSpeed(total);
+        console.log(speed);
+
         const formata = await formatProtocolSpeed(speed, total)
 
         // console.log("Total contas:", total);
@@ -363,6 +365,8 @@ async function defiSpeedHandler(ctx) {
         );
 
     } catch (error) {
+        console.error(error);
+
         return ctx.reply(
             `❌ *Erro ao estimar o ciclo*\n` +
             `Verifique sua conexão ou tente novamente mais tarde.`,
