@@ -3,3 +3,4 @@ node_modules
 db/database.sqlite
 discloud.config
 test.js
+discloud
