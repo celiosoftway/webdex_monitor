@@ -6,7 +6,6 @@ const carteira = '0xbDb9d76E9917a4A6993A9D66cDEF5F42F07f3234';
 const apikey = 'NC1JUZZWX9Y4JPC6IP852GHG1ISF17TVWM';
 const colateral = '0xfb2e2ff7b51c2bcaf58619a55e7d2ff88cfd8aca';
 
-
 // cálculo do lucro líquido e percentual ajustado
 function getLucroLiquido(resumo, gasUsd) {
     const lucroBrutoUsd = resumo.lucroDia || resumo.valor || 0; // lucro em token colateral

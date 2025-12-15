@@ -5,17 +5,18 @@ const fs = require('fs').promises;
 const path = require('path');
 
 const User = require("./models/User");
-const { getHistoricoDados, getResumoPeriodo, historico } = require("./util/lucro");
+const { getHistoricoDados, getHistoricoDadosLiquido, getResumoPeriodo, historico } = require("./util/lucro");
 const { getCMCPrice, getCachedCMCPrice } = require('./util/util');
-const { getProtocolSpeed, formatProtocolSpeed } = require("./util/defi_speed")
+const { getProtocolSpeed, formatProtocolSpeed } = require("./util/defi_speed");
 
 const FILE_PATH = path.resolve('./unique_holders_24h.json');
 
 // teclado do bot
 const keyboard = Markup.keyboard([
-    ["📈 Lucro", "📊 Gerar CSV",],
+    ["📈 Lucro", "💸 Lucro Líquido"],
     ["👛 Configurar", "📋 Ver Config"],
-    ["🧠 Ajuda", "💬 Grupo Help"]
+    ["🧠 Ajuda", "💬 Grupo Help"],
+    ["📊 Gerar CSV"],
 ]).resize();
 
 // comando start, envia uma mensagem em privato
@@ -138,6 +139,95 @@ async function lucroHandler(ctx) {
         const polUsdPrice = await getCachedCMCPrice();
 
         const { resultado: dados, lucro24h } = await getHistoricoDados(carteira, apikey, colateral);
+        const resumo0d = getResumoPeriodo(dados, 0);
+        const resumo1d = getResumoPeriodo(dados, 1);
+        const resumo7d = getResumoPeriodo(dados, 7);
+        const resumo30d = getResumoPeriodo(dados, 30);
+
+        const gasUsdresumo0d = resumo0d.gasPeriodo * polUsdPrice;
+        const gasUsdlucro24h = lucro24h.gasTotal * polUsdPrice;
+        const gasUsdresumo1d = resumo1d.gasPeriodo * polUsdPrice;
+        const gasUsdresumo7d = resumo7d.gasPeriodo * polUsdPrice;
+        const gasUsdresumo30d = resumo30d.gasPeriodo * polUsdPrice;
+
+        // adiciona cálculo de lucro líquido
+        const l0 = getLucroLiquido(resumo0d, gasUsdresumo0d);
+        const l24 = getLucroLiquido(lucro24h, gasUsdlucro24h);
+        const l1 = getLucroLiquido(resumo1d, gasUsdresumo1d);
+        const l7 = getLucroLiquido(resumo7d, gasUsdresumo7d);
+        const l30 = getLucroLiquido(resumo30d, gasUsdresumo30d);
+
+        const webdex = 0.009630000000;
+
+        // adiciona cálculo de lucro líquido
+        const wl0 = resumo0d.totalOperacoes * webdex;
+        const wl24 = lucro24h.totalOperacoes * webdex;
+        const wl1 = resumo1d.totalOperacoes * webdex;
+        const wl7 = resumo7d.totalOperacoes * webdex;
+        const wl30 = resumo30d.totalOperacoes * webdex;
+
+        let mensagem = ``;
+        mensagem += `*Resultado da automação WeBDex Defi*\n\n`;
+        mensagem += `📅 *Hoje*\n`;
+        mensagem += `🧾 ${resumo0d.totalOperacoes} operações (${wl0.toFixed(5)} WeBDex)\n`;
+        mensagem += `📊 OP: ${resumo0d.totalLucroBruto.toFixed(3)} | 📛 ${resumo0d.totalPerdaBruta.toFixed(3)}\n`;
+        mensagem += `💰 Lucro: ${resumo0d.lucroDia.toFixed(3)} (${resumo0d.percentual.toFixed(2)}%)\n\n`;
+
+        mensagem += `📅 *Últimas 24 horas*\n`;
+        mensagem += `🧾 ${lucro24h.totalOperacoes} operações (${wl24.toFixed(5)} WeBDex)\n`;
+        mensagem += `📊 OP: ${lucro24h.totalLucroBruto.toFixed(3)} | 📛 ${lucro24h.totalPerdaBruta.toFixed(3)}\n`;
+        mensagem += `💰 Lucro: ${lucro24h.valor.toFixed(3)} (${lucro24h.percentual.toFixed(2)}%)\n\n`;
+
+        mensagem += `📅 *Último dia*\n`;
+        mensagem += `🧾 ${resumo1d.totalOperacoes} operações (${wl1.toFixed(5)} WeBDex)\n`;
+        mensagem += `📊 OP: ${resumo1d.totalLucroBruto.toFixed(3)} | 📛 ${resumo1d.totalPerdaBruta.toFixed(3)}\n`;
+        mensagem += `💰 Lucro: ${resumo1d.lucroDia.toFixed(3)} (${resumo1d.percentual.toFixed(2)}%)\n\n`;
+
+        mensagem += `📅 *Últimos 7 dias*\n`;
+        mensagem += `🧾 ${resumo7d.totalOperacoes} operações (${wl7.toFixed(5)} WeBDex)\n`;
+        mensagem += `📊 OP: ${resumo7d.totalLucroBruto.toFixed(3)} | 📛 ${resumo7d.totalPerdaBruta.toFixed(3)}\n`;
+        mensagem += `💰 Lucro: ${resumo7d.lucroDia.toFixed(3)} (${resumo7d.percentual.toFixed(2)}%)\n\n`;
+
+        mensagem += `📅 *Últimos 30 dias*\n`;
+        mensagem += `🧾 ${resumo30d.totalOperacoes} operações (${wl30.toFixed(5)} WeBDex)\n`;
+        mensagem += `📊 OP: ${resumo30d.totalLucroBruto.toFixed(3)} | 📛 ${resumo30d.totalPerdaBruta.toFixed(3)}\n`;
+        mensagem += `💸 Lucro: ${resumo30d.lucroDia.toFixed(3)} (${resumo30d.percentual.toFixed(2)}%)\n\n`;
+
+        await ctx.reply(mensagem, { parse_mode: "Markdown" });
+    } catch (err) {
+        console.error("Erro ao calcular lucro:", err);
+        ctx.reply("❌ Erro ao calcular lucro.");
+    }
+}
+
+async function lucroLiquidoHandler(ctx) {
+    const telegram_id = ctx.from.id.toString();
+    const user = await User.findOne({ where: { telegram_id } });
+
+    if (!user || !user.wallet)
+        return ctx.reply("❌ Você precisa configurar sua carteira usando /config");
+
+    if (!user.rpc_url)
+        return ctx.reply("❌ Você precisa configurar o RPC usando /config");
+
+    if (!user.polygonscan_api_key)
+        return ctx.reply("❌ Você precisa configurar sua chave PolygonScan API usando /config");
+
+    const carteira = user.wallet;
+    const apikey = user.polygonscan_api_key;
+    const rpc_url = user.rpc_url
+
+    let colateral = process.env.TOKEN_COLATERAL_ADDRESS
+    if (user.telegram_id === '7433193517000') {
+        colateral = process.env.LOOP_COLATERAL
+    };
+
+    try {
+        await ctx.reply("🔄 Aguarde... Calculando lucro líquido", { parse_mode: "Markdown" });
+
+        const polUsdPrice = await getCachedCMCPrice();
+
+        const { resultado: dados, lucro24h } = await getHistoricoDadosLiquido(carteira, apikey, colateral,rpc_url);
         const resumo0d = getResumoPeriodo(dados, 0);
         const resumo1d = getResumoPeriodo(dados, 1);
         const resumo7d = getResumoPeriodo(dados, 7);
@@ -382,5 +472,6 @@ module.exports = {
     lucroHandler,
     csvHandler,
     testApiHandler,
-    defiSpeedHandler
+    defiSpeedHandler,
+    lucroLiquidoHandler
 };

@@ -117,7 +117,9 @@ const ABI_DECODE_TX = [
     "function LiquidityRemove(string[] accountId,address strategyToken,address coin,uint256 amount)",
     "function LiquidityRemove(string accountId,address strategyToken,address coin,uint256 amount)", // fallback
     "function openPosition(address contractAddress,string accountId,address strategyToken,address user,int256 amount,(address,address)[] pairs,uint256 leverage,address referrer)",
-    "function openPosition(address, string, address, address, int256, (address,address)[], uint256, address, string)"
+    "function openPosition(address, string, address, address, int256, (address,address)[], uint256, address, string)",
+    // ✅ ABI correta do openPosition
+    "function openPosition(address contractAddress,string accountId,address strategyToken,address user,int256 amount,(address,address)[] currrencys,uint256 gas,address coin,string botId)"
 ];
 
 
@@ -161,9 +163,10 @@ async function decodeTransactionInput(txHash, provider1) {
                     strategyToken: decoded.args[2],
                     user: decoded.args[3],
                     amount: decoded.args[4]?.toString?.() || null,
-                    pairs: decoded.args[5],
-                    leverage: decoded.args[6]?.toString?.() || null,
-                    referrer: decoded.args[7],
+                    currrencys: decoded.args[5],
+                    gas: decoded.args[6]?.toString?.() || null,  
+                    coin: decoded.args[7],
+                    botId: decoded.args[8],
                 },
             };
         }

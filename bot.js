@@ -1,17 +1,19 @@
 require("dotenv").config();
 const { Telegraf, Scenes, session, Markup } = require("telegraf");
+const ethers = require('ethers');
 
 // Banco de dados
 const sequelize = require("./db/database");
 const User = require("./models/User");
 const AccountAlias = require("./models/AccountAlias");
-const { 
-    iniciarTotalContas, 
-    getUniqueHoldersLast24h 
+const {
+    iniciarTotalContas,
+    getUniqueHoldersLast24h
 } = require("./util/defi_speed")
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const OWNER_ID = process.env.OWNER_ID;
+const DEBUG = process.env.DEBUG;
 
 // scenes
 const carteiraScene = require("./scenes/configCarteiraScene");
@@ -26,7 +28,8 @@ const {
     lucroHandler,
     csvHandler,
     testApiHandler,
-    defiSpeedHandler
+    defiSpeedHandler,
+    lucroLiquidoHandler
 } = require("./handler");
 
 const { getTokenTransactions, decodeTransactionInput } = require("./util/contrato");
@@ -80,6 +83,7 @@ bot.hears("🧠 Ajuda", ajudaHandler);
 bot.hears("📋 Ver Config", verConfigHandler);
 bot.hears("📈 Lucro", lucroHandler);
 bot.hears("📊 Gerar CSV", csvHandler);
+bot.hears("💸 Lucro Líquido", lucroLiquidoHandler);
 
 let helpGroup = `[Grupo para dúvidas](https://t.me/+y9SU2a60q_s5Mzkx)\n\n`;
 bot.hears("💬 Grupo Help", (ctx) => ctx.reply(helpGroup, { parse_mode: "Markdown" }));
@@ -102,8 +106,8 @@ bot.action("configAPIKey", (ctx) => ctx.scene.enter("config-apikey"));
 let notificados = new Set();
 const inicioMonitoramento = Math.floor(Date.now() / 1000); // timestamp em segundos
 
-//debug
-// const HORAS_ATRAS = 6; // escolha quantas horas
+// debug
+// const HORAS_ATRAS = 1; // escolha quantas horas
 // let inicioMonitoramento = Math.floor(Date.now() / 1000) - (HORAS_ATRAS * 60 * 60);
 
 
@@ -145,6 +149,8 @@ async function monitorarOpenPositions() {
                     const conta = decode?.args?.accountId?.[0] || 'unknown';
 
                     const gasUSD = tx.gasValor * polUsdPrice;
+                    const gasProtocolo = ethers.formatUnits(decode.args.gas, 18);
+                    const gasProtocoloUsd = gasProtocolo * polUsdPrice;
 
                     let contaDisplay = conta;
                     if (conta !== 'unknown') {
@@ -161,7 +167,8 @@ async function monitorarOpenPositions() {
                     mensagem += `🔗 [Ver Transação](https://polygonscan.com/tx/${tx.transactionHash})\n\n`;
 
                     mensagem += `💰 Quantia: ${perdaIcone}${tx.amount}\n`;
-                    mensagem += `⛽ Gas: ${tx.gasValor} (${gasUSD.toFixed(3)} USD) \n`;
+                    //mensagem += `⛽ Gas Transação: ${tx.gasValor} (${gasUSD.toFixed(3)} USD) \n`;
+                    mensagem += `⛽ Gas: ${Number(gasProtocolo).toFixed(5)} (${gasProtocoloUsd.toFixed(3)} USD) \n`;
                     mensagem += `📅 Data: ${formatarData(tx.timestamp)}\n`;
 
                     await bot.telegram.sendMessage(user.telegram_id, mensagem, {

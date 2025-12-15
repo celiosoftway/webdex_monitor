@@ -2,11 +2,11 @@ require("dotenv").config();
 const { ethers } = require("ethers");
 const fs = require("fs");
 const path = require("path");
-const { getCMCPrice } = require('./util');
 
 const {
   formatarDataSimples,
-  identificarTipoOperacaoPorNome } = require("./util");
+  identificarTipoOperacaoPorNome,
+  getCMCPrice } = require("./util");
 
 async function getHistoricoDados(carteira, api, token) {
   const signerAddress = carteira || process.env.CARTEIRA;
@@ -521,9 +521,279 @@ async function historico(carteira, api, token) {
   }
 }
 
+async function getHistoricoDadosLiquido(carteira, api, token, rpc) {
+  const signerAddress = carteira || process.env.CARTEIRA;
+  const apiKey = api || process.env.POLYGONSCAN_API_KEY;
+  const colateral = token || process.env.TOKEN_COLATERAL_ADDRESS;
+
+  const params = new URLSearchParams({
+    chainid: '137',
+    module: 'account',
+    action: 'tokentx',
+    address: signerAddress,
+    contractaddress: colateral,
+    sort: 'asc',
+    apikey: apiKey
+  });
+
+  // Função para buscar transações
+  const fetchTransactions = async (startBlock) => {
+    params.set('startblock', startBlock);
+    const url = `https://api.etherscan.io/v2/api?${params.toString()}`;
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (!data.result || !Array.isArray(data.result)) {
+      throw new Error("Erro ao obter transações.");
+    }
+
+    return data.result;
+  };
+
+  let allTransactions = [];
+  let lastBlock = 0;
+
+  // Primeira consulta das transações
+  let transactions = await fetchTransactions(0);
+  allTransactions.push(...transactions);
+
+  // Loop para buscar mais transações caso o limite de 10.000 seja alcançado
+  while (transactions.length === 10000) {
+    lastBlock = parseInt(transactions[transactions.length - 1].blockNumber);
+    transactions = await fetchTransactions(lastBlock + 1);
+    allTransactions.push(...transactions);
+  }
+
+  const resumoPorDia = {};
+  let decimal = 6;
+
+  for (const tx of allTransactions) {
+    const tipo = identificarTipoOperacaoPorNome(tx.functionName);
+    if (tipo === 'Desconhecido') continue;
+
+    decimal = Number(tx.tokenDecimal) || 6;
+    const dataChave = formatarDataSimples(tx.timeStamp);
+    const isSaida = tx.from.toLowerCase() === signerAddress.toLowerCase();
+    const valor = parseFloat(ethers.formatUnits(tx.value, decimal)) * (isSaida ? -1 : 1);
+
+    // ======================================================
+    // ✅ NOVO: GAS DO PROTOCOLO (POL VIA LogTransfer)
+    // ======================================================
+
+    let gas = 0;
+
+    if (tipo === 'OpenPosition') {
+      const decode = await decodeTransactionInputUser(tx.hash,rpc);
+      gas = parseFloat(ethers.formatUnits(decode.args.gas, 18)) || 0;
+    }
+
+    if (!resumoPorDia[dataChave]) {
+      resumoPorDia[dataChave] = {
+        LiquidityAdd: 0,
+        LiquidityRemove: 0,
+        OpenPosition: 0,
+        opCount: 0,
+        lucroBruto: 0,
+        perdaBruta: 0,
+        gas: 0
+      };
+    }
+
+    resumoPorDia[dataChave][tipo] += valor;
+    resumoPorDia[dataChave].gas += gas;
+
+    if (tipo === 'OpenPosition') {
+      resumoPorDia[dataChave].opCount += 1;
+      if (valor >= 0) resumoPorDia[dataChave].lucroBruto += valor;
+      else resumoPorDia[dataChave].perdaBruta += Math.abs(valor);
+    }
+  }
+
+  const datas = Object.keys(resumoPorDia).sort((a, b) => {
+    const [d1, m1, y1] = a.split('/').map(Number);
+    const [d2, m2, y2] = b.split('/').map(Number);
+    return new Date(y1, m1 - 1, d1) - new Date(y2, m2 - 1, d2);
+  });
+
+  let capital = 0;
+  let capitaldia1 = 0;
+  let lucroTotal = 0;
+  let gastotal = 0;
+
+  const resultado = [];
+
+  if (datas.length > 0) {
+    const primeiraData = datas[0];
+    const d0 = resumoPorDia[primeiraData];
+    if (d0.LiquidityAdd > 0) capitaldia1 = d0.LiquidityAdd;
+  }
+
+  for (const dataKey of datas) {
+    const d = resumoPorDia[dataKey];
+    const investimento = d.LiquidityAdd + d.LiquidityRemove;
+    const lucro = d.OpenPosition;
+    const capitalInicialDia = capital > 0 ? capital : capitaldia1;
+    capital += investimento + lucro;
+    lucroTotal += lucro;
+    gastotal += d.gas;
+
+    const transacoesDoDia = allTransactions.filter(tx => {
+      return formatarDataSimples(tx.timeStamp) === dataKey;
+    });
+
+    const percentualPonderado = calculaPPT(transacoesDoDia, capitalInicialDia, signerAddress, decimal);
+
+    resultado.push({
+      data: dataKey,
+      addRem: investimento,
+      capital,
+      lucroDia: lucro,
+      lucroTotal,
+      percentual: percentualPonderado,
+      operacoes: d.opCount,
+      lucroBruto: d.lucroBruto,
+      perdaBruta: d.perdaBruta,
+      gasDia: d.gas,        // 👈 adiciona gas diário
+      gasTotal: gastotal,    // 👈 adiciona gas acumulado
+      decimal
+    });
+  }
+
+  // --- cálculo das últimas 24h ---
+  const agora = Math.floor(Date.now() / 1000); // Timestamp atual
+  const limite24h = agora - 24 * 60 * 60;  // Timestamp de 24 horas atrás
+
+  const ultimas24hOps = allTransactions.filter(op => {
+    const tipo = identificarTipoOperacaoPorNome(op.functionName);
+    return tipo === "OpenPosition" && Number(op.timeStamp) >= limite24h;
+  });
+
+  // 💰 lucro/perda das últimas 24h
+  const ultimas24hValores = ultimas24hOps.map(op => {
+    const valor = parseFloat(ethers.formatUnits(op.value, decimal)) *
+      (op.from.toLowerCase() === signerAddress.toLowerCase() ? -1 : 1);
+    return valor;
+  });
+
+  // ⛽ cálculo do gas das últimas 24h
+  const gas24hTotal = ultimas24hOps.reduce((acc, op) => {
+    const gasUsed = BigInt(op.gasUsed || 0n);
+    const gasPrice = BigInt(op.gasPrice || 0n);
+    const totalWei = gasUsed * gasPrice;
+    const gasEther = parseFloat(ethers.formatEther(totalWei)) || 0;
+    return acc + gasEther;
+  }, 0);
+
+  // 📈 estatísticas de lucro
+  const lucro24hValor = ultimas24hValores.reduce((acc, v) => acc + v, 0);
+  const totalOperacoes24h = ultimas24hValores.length;
+  const totalLucroBruto24h = ultimas24hValores.filter(v => v >= 0).reduce((acc, v) => acc + v, 0);
+  const totalPerdaBruta24h = ultimas24hValores.filter(v => v < 0).reduce((acc, v) => acc + Math.abs(v), 0);
+
+  // 🔹 ROI das últimas 24h
+  let capitalAntes24h = 0;
+  for (let i = resultado.length - 1; i >= 0; i--) {
+    const dataItem = new Date(resultado[i].data.split('/').reverse().join('-'));
+    if (dataItem.getTime() / 1000 < limite24h) {
+      capitalAntes24h = resultado[i].capital;
+      break;
+    }
+  }
+  if (capitalAntes24h === 0 && resultado.length > 0) {
+    capitalAntes24h = resultado[resultado.length - 1].capital;
+  }
+  const lucro24hPercent = capitalAntes24h > 0 ? (lucro24hValor / capitalAntes24h) * 100 : 0;
+
+  // 🧾 objeto final das últimas 24h
+  const lucro24h = {
+    valor: lucro24hValor,
+    percentual: lucro24hPercent,
+    totalOperacoes: totalOperacoes24h,
+    totalLucroBruto: totalLucroBruto24h,
+    totalPerdaBruta: totalPerdaBruta24h,
+    gasTotal: gas24hTotal,   // 👈 novo campo: total de gas nas últimas 24h
+    decimal
+  };
+
+  return { resultado, lucro24h };  // Retorna o resultado e os dados das últimas 24h
+}
+
+// Função que busca e decodifica input data
+async function decodeTransactionInputUser(txHash, rpc) {
+    // console.log("⚙️ Executando decodeTransactionInput");
+
+    try {
+        const provider_decode = new ethers.JsonRpcProvider(rpc);
+        const tx = await provider_decode.getTransaction(txHash);
+
+        if (!tx) throw new Error(`Transação ${txHash} não encontrada`);
+
+        const iface = new ethers.Interface(ABI_DECODE_TX);
+        const decoded = iface.parseTransaction({ data: tx.data, value: tx.value });
+        if (!decoded) throw new Error("Método não encontrado na ABI");
+
+        if (decoded.name === "LiquidityAdd" || decoded.name === "LiquidityRemove") {
+            const rawAccount = decoded.args[0];
+            const accountIdArray = Array.isArray(rawAccount) ? rawAccount : [rawAccount];
+
+            return {
+                functionName: decoded.name,
+                args: {
+                    accountId: accountIdArray,
+                    strategyToken: decoded.args[1],
+                    coin: decoded.args[2],
+                    amount: decoded.args[3]?.toString?.() || null,
+                },
+            };
+        }
+
+        if (decoded.name === "openPosition") {
+            const rawAccount = decoded.args[1];
+            const accountIdArray = Array.isArray(rawAccount) ? rawAccount : [rawAccount];
+
+            return {
+                functionName: decoded.name,
+                args: {
+                    contractAddress: decoded.args[0],
+                    accountId: accountIdArray,
+                    strategyToken: decoded.args[2],
+                    user: decoded.args[3],
+                    amount: decoded.args[4]?.toString?.() || null,
+                    currrencys: decoded.args[5],
+                    gas: decoded.args[6]?.toString?.() || null,  
+                    coin: decoded.args[7],
+                    botId: decoded.args[8],
+                },
+            };
+        }
+
+        return {
+            functionName: decoded.name,
+            args: decoded.args,
+        };
+    } catch (error) {
+        const methodId = ""; //(tx?.data || "").slice(0, 10);
+        console.warn(`Erro ao decodificar input: ${txHash} ${error.message} (${methodId} )`);
+        return { functionName: "unknown", args: {}, methodId };
+    }
+}
+
+const ABI_DECODE_TX = [
+    "function LiquidityAdd(string[] accountId,address strategyToken,address coin,uint256 amount)",
+    "function LiquidityAdd(string accountId,address strategyToken,address coin,uint256 amount)", // fallback possível
+    "function LiquidityRemove(string[] accountId,address strategyToken,address coin,uint256 amount)",
+    "function LiquidityRemove(string accountId,address strategyToken,address coin,uint256 amount)", // fallback
+     "function openPosition(address contractAddress,string accountId,address strategyToken,address user,int256 amount,(address,address)[] currrencys,uint256 gas,address coin,string botId)",
+
+    "function openPosition(address contractAddress,string accountId,address strategyToken,address user,int256 amount,(address,address)[] pairs,uint256 leverage,address referrer)",
+    "function openPosition(address, string, address, address, int256, (address,address)[], uint256, address, string)",
+];
+
 
 module.exports = {
   getResumoPeriodo,
   getHistoricoDados,
-  historico
+  getHistoricoDadosLiquido,
+  historico,
+  calculaPPT
 }
