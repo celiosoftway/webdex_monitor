@@ -168,7 +168,7 @@ async function monitorarOpenPositions() {
 
                     mensagem += `💰 Quantia: ${perdaIcone}${tx.amount}\n`;
                     //mensagem += `⛽ Gas Transação: ${tx.gasValor} (${gasUSD.toFixed(3)} USD) \n`;
-                    mensagem += `⛽ Gas: ${Number(gasProtocolo).toFixed(5)} (${gasProtocoloUsd.toFixed(3)} USD) \n`;
+                    mensagem += `⛽ Gas cobrado: ${Number(gasProtocolo).toFixed(5)} (${gasProtocoloUsd.toFixed(3)} USD) \n`;
                     mensagem += `📅 Data: ${formatarData(tx.timestamp)}\n`;
 
                     await bot.telegram.sendMessage(user.telegram_id, mensagem, {
