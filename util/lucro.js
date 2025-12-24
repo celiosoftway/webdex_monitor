@@ -795,5 +795,6 @@ module.exports = {
   getHistoricoDados,
   getHistoricoDadosLiquido,
   historico,
-  calculaPPT
+  calculaPPT,
+  decodeTransactionInputUser
 }

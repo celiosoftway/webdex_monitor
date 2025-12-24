@@ -29,7 +29,8 @@ const {
     csvHandler,
     testApiHandler,
     defiSpeedHandler,
-    lucroLiquidoHandler
+    lucroLiquidoHandler,
+    lucroLiquidoHibridoHandler
 } = require("./handler");
 
 const { getTokenTransactions, decodeTransactionInput } = require("./util/contrato");
@@ -84,6 +85,7 @@ bot.hears("📋 Ver Config", verConfigHandler);
 bot.hears("📈 Lucro", lucroHandler);
 bot.hears("📊 Gerar CSV", csvHandler);
 bot.hears("💸 Lucro Líquido", lucroLiquidoHandler);
+bot.hears("💸 Lucro Líquido Beta", lucroLiquidoHibridoHandler);
 
 let helpGroup = `[Grupo para dúvidas](https://t.me/+y9SU2a60q_s5Mzkx)\n\n`;
 bot.hears("💬 Grupo Help", (ctx) => ctx.reply(helpGroup, { parse_mode: "Markdown" }));
@@ -107,7 +109,7 @@ let notificados = new Set();
 const inicioMonitoramento = Math.floor(Date.now() / 1000); // timestamp em segundos
 
 // debug
-// const HORAS_ATRAS = 1; // escolha quantas horas
+// const HORAS_ATRAS = 10; // escolha quantas horas
 // let inicioMonitoramento = Math.floor(Date.now() / 1000) - (HORAS_ATRAS * 60 * 60);
 
 
