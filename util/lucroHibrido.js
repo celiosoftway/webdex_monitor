@@ -7,7 +7,7 @@ const {
   identificarTipoOperacaoPorNome,
   getCMCPrice } = require("./util");
 
-const { calculaPPT, decodeTransactionInputUser } = require('./lucro'); 
+const { calculaPPT, decodeTransactionInputUser } = require('./lucro');
 
 // ===============================
 // FUNÇÃO PRINCIPAL (HÍBRIDA)
@@ -218,13 +218,20 @@ async function getHistoricoDadosLiquidoHibrido(
   const lucro24hValor = valores24h.reduce((a, b) => a + b, 0);
   const totalOperacoes24h = valores24h.length;
 
+  const gas24hTotal = ultimas24hOps.reduce((acc, tx) => {
+    if (tx.gasWebdex) {
+      return acc + Number(tx.gasWebdex);
+    }
+    return acc;
+  }, 0);
+
   const lucro24h = {
     valor: lucro24hValor,
     percentual: capital > 0 ? (lucro24hValor / capital) * 100 : 0,
     totalOperacoes: totalOperacoes24h,
     totalLucroBruto: valores24h.filter(v => v >= 0).reduce((a, b) => a + b, 0),
     totalPerdaBruta: valores24h.filter(v => v < 0).reduce((a, b) => a + Math.abs(b), 0),
-    gasTotal: gastotal,
+    gasTotal: gas24hTotal,
     decimal
   };
 

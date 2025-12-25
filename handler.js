@@ -17,7 +17,7 @@ const keyboard = Markup.keyboard([
     ["📈 Lucro", "💸 Lucro Líquido"],
     ["👛 Configurar", "📋 Ver Config"],
     ["🧠 Ajuda", "💬 Grupo Help"],
-    ["📊 Gerar CSV","💸 Lucro BD Beta"],
+    ["📊 Gerar CSV","💸 Lucro Líquido Beta"],
 ]).resize();
 
 // comando start, envia uma mensagem em privato
